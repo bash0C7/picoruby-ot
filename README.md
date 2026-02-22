@@ -20,6 +20,13 @@ A PicoRuby (R2P2-ESP32) application for **M5 ATOM Matrix (ESP32-PICO-D4)** featu
 - **WS2812 LED strip** with dynamic color response to sound
 - **Ambient visualization** with smooth wave-like LED patterns
 
+### otv.rb - Distance Sensor UART Visualizer
+- Distance-to-frequency mapping (20mm-300mm -> 200Hz-1000Hz, same as otpwm.rb)
+- UART output instead of PWM: sends <F:NNNNN,D:NNN> frames to Chrome via USB Serial
+- WS2812 LED strip visualization (same as otpwm.rb)
+- Use with ruby_sound_visualizer for Chrome Web Audio API PWM tone playback
+- Button toggles mute (UART send on/off)
+
 ## Hardware
 
 **Device**: M5 ATOM Matrix (ESP32-PICO-D4)
@@ -51,7 +58,8 @@ picoruby-ot/
 ├── src_components/R2P2-ESP32/
 │   ├── storage/home/
 │   │   ├── otma.rb              # Auto drum machine
-│   │   └── otpwm.rb             # Distance sensor instrument
+│   │   ├── otpwm.rb             # Distance sensor instrument
+│   │   └── otv.rb               # Distance sensor UART visualizer (for Chrome audio)
 │   └── components/picoruby-esp32/
 │       └── picoruby/build_config/
 │           └── xtensa-esp.rb     # Xtensa (ESP32) build config
@@ -117,6 +125,15 @@ rake flash
 6. Distance changes pitch; tilt device for sound modulation
 7. Press button to mute/unmute
 
+### otv.rb (UART Visualizer for Chrome)
+
+1. Flash `otv.rb` to ATOM Matrix
+2. Connect sensors via J3 (I2C: GPIO25=SDA, GPIO21=SCL) — same as otpwm.rb
+3. Connect USB to Mac running Chrome
+4. Open ruby_sound_visualizer, connect Web Serial
+5. Move hand near ToF sensor — Chrome plays PWM tone via Web Audio API
+6. Press button to mute/unmute UART frequency output
+
 **Sensor Ranges**:
 - Distance: 20mm (low tone) to 300mm (high tone)
 - Frequency: 200Hz to 1000Hz
@@ -169,13 +186,19 @@ picoruby-ot (PicoRuby/mruby applications)
 │   ├── RhythmLEDVisualizer: Pattern-synchronized LED colors
 │   └── UART MIDI (GPIO22/19 @ 31250 bps)
 │
-└── otpwm.rb
-    ├── NoiseInstrument: Distance/accel → frequency/duty mapping
-    ├── AmbientLEDVisualizer: Sound-responsive LED patterns
-    ├── VL53L0X (ToF distance)
-    ├── MPU6886 (accelerometer)
-    ├── PWM Speaker (GPIO33)
-    └── WS2812 LED Strip (30 pixels)
+├── otpwm.rb
+│   ├── NoiseInstrument: Distance/accel → frequency/duty mapping
+│   ├── AmbientLEDVisualizer: Sound-responsive LED patterns
+│   ├── VL53L0X (ToF distance)
+│   ├── MPU6886 (accelerometer)
+│   ├── PWM Speaker (GPIO33)
+│   └── WS2812 LED Strip (30 pixels)
+│
+└── otv.rb
+    ├── NoiseInstrument: Distance -> frequency/duty mapping (reused from otpwm.rb)
+    ├── AmbientLEDVisualizer: LED visualization (reused from otpwm.rb)
+    ├── UARTSender: UART <F:NNN,D:NNN> frame output (replaces PWM)
+    └── WS2812 LED Strip (GPIO26)
 ```
 
 ## Performance
