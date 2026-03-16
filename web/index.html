@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>picoruby-ot Synth</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{background:#111;color:#ccc;font-family:monospace;font-size:12px;padding:10px}
+    h1{color:#0f0;font-size:16px;margin-bottom:10px;border-bottom:1px solid #333;padding-bottom:6px}
+    #app{max-width:520px;margin:0 auto}
+    .sec{background:#1a1a1a;border:1px solid #333;border-radius:4px;padding:8px 10px;margin-bottom:8px}
+    .t{color:#0cc;font-size:11px;font-weight:bold;margin-bottom:6px;text-transform:uppercase;letter-spacing:1px}
+    .row{display:flex;align-items:center;margin-bottom:4px;gap:6px}
+    .row label{width:110px;color:#888;flex-shrink:0}
+    .row input[type=range]{flex:1;accent-color:#0f0}
+    .row .v{width:50px;text-align:right;color:#aaa}
+    .r2{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:4px}
+    button{background:#222;border:1px solid #555;color:#ccc;cursor:pointer;padding:4px 10px;font-family:monospace;font-size:11px;border-radius:3px}
+    button:hover{background:#333;border-color:#0f0;color:#0f0}
+    .st{color:#0f0;font-size:11px;padding:2px 6px;background:#0a1a0a;border:1px solid #1a4a1a;border-radius:3px}
+    .st.e{color:#f44;background:#1a0a0a;border-color:#4a1a1a}
+    #sv{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:4px}
+    .sv{background:#222;border:1px solid #333;border-radius:3px;padding:4px 6px;text-align:center}
+    .sv .l{color:#666;font-size:10px}
+    .sv .n{color:#0f0;font-size:13px;font-weight:bold}
+    #mon{background:#0a0a0a;border:1px solid #222;border-radius:3px;padding:6px;height:80px;overflow-y:auto;font-size:10px;color:#0a0;word-break:break-all}
+    select{background:#222;color:#ccc;border:1px solid #555;font-family:monospace;font-size:11px;padding:2px}
+  </style>
+</head>
+<body>
+<div id="app">
+  <h1>picoruby-ot Synth</h1>
+
+  <div class="sec">
+    <div class="t">Serial</div>
+    <div class="r2">
+      <button id="bCon" onclick="serialConnect()">Connect</button>
+      <button id="bDis" onclick="serialDisconnect()" disabled>Disconnect</button>
+      <select id="baud"><option value="115200" selected>115200</option><option value="38400">38400</option></select>
+      <span class="st e" id="sst">disconnected</span>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="t">Sensor</div>
+    <div id="sv">
+      <div class="sv"><div class="l">Dist mm</div><div class="n" id="vD">--</div></div>
+      <div class="sv"><div class="l">Freq Hz</div><div class="n" id="vF">--</div></div>
+      <div class="sv"><div class="l">FM %</div><div class="n" id="vFM">--</div></div>
+      <div class="sv"><div class="l">AX</div><div class="n" id="vAX">--</div></div>
+      <div class="sv"><div class="l">AY</div><div class="n" id="vAY">--</div></div>
+      <div class="sv"><div class="l">AZ</div><div class="n" id="vAZ">--</div></div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="t">Sensor Mapping</div>
+    <div class="row"><label>Dist Min mm</label><input type="range" min="0" max="500" value="20" oninput="p('dist_min',this.value);this.nextElementSibling.textContent=this.value"><span class="v">20</span></div>
+    <div class="row"><label>Dist Max mm</label><input type="range" min="100" max="2000" value="900" oninput="p('dist_max',this.value);this.nextElementSibling.textContent=this.value"><span class="v">900</span></div>
+    <div class="row"><label>Freq Min Hz</label><input type="range" min="20" max="500" value="40" oninput="p('freq_min',this.value);this.nextElementSibling.textContent=this.value"><span class="v">40</span></div>
+    <div class="row"><label>Freq Max Hz</label><input type="range" min="200" max="8000" value="2000" oninput="p('freq_max',this.value);this.nextElementSibling.textContent=this.value"><span class="v">2000</span></div>
+    <div class="row"><label>Accel Scale</label><input type="range" min="50" max="2000" value="500" oninput="p('accel_scale',this.value);this.nextElementSibling.textContent=this.value"><span class="v">500</span></div>
+  </div>
+
+  <div class="sec">
+    <div class="t">FM</div>
+    <div class="row"><label>Depth Scale</label><input type="range" min="0" max="1000" value="400" oninput="window.fmDepthScale=+this.value;this.nextElementSibling.textContent=this.value"><span class="v">400</span></div>
+  </div>
+
+  <div class="sec">
+    <div class="t">Filter</div>
+    <div class="row2"><span>Type:</span>
+      <button onclick="setFT('lowpass',this)" style="border-color:#0f0;color:#0f0">LP</button>
+      <button onclick="setFT('highpass',this)">HP</button>
+      <button onclick="setFT('bandpass',this)">BP</button>
+    </div>
+    <div class="row"><label>Cutoff Hz</label><input type="range" min="80" max="8000" value="800" oninput="p('filter_cutoff',this.value);this.nextElementSibling.textContent=this.value"><span class="v">800</span></div>
+    <div class="row"><label>Q</label><input type="range" min="1" max="30" step="0.1" value="1.2" oninput="p('filter_q',this.value);this.nextElementSibling.textContent=(+this.value).toFixed(1)"><span class="v">1.2</span></div>
+  </div>
+
+  <div class="sec">
+    <div class="t">Envelope ADSR</div>
+    <div class="row"><label>Attack ms</label><input type="range" min="1" max="2000" value="10" oninput="p('attack',this.value);this.nextElementSibling.textContent=this.value"><span class="v">10</span></div>
+    <div class="row"><label>Decay ms</label><input type="range" min="1" max="2000" value="50" oninput="p('decay',this.value);this.nextElementSibling.textContent=this.value"><span class="v">50</span></div>
+    <div class="row"><label>Sustain</label><input type="range" min="0" max="1" step="0.01" value="0.7" oninput="p('sustain',this.value);this.nextElementSibling.textContent=(+this.value).toFixed(2)"><span class="v">0.70</span></div>
+    <div class="row"><label>Release ms</label><input type="range" min="10" max="5000" value="200" oninput="p('release',this.value);this.nextElementSibling.textContent=this.value"><span class="v">200</span></div>
+  </div>
+
+  <div class="sec">
+    <div class="t">Master</div>
+    <div class="row"><label>Volume</label><input type="range" min="0" max="1" step="0.01" value="0.4" oninput="window.synthMasterGain=+this.value;p('master_gain',this.value);this.nextElementSibling.textContent=(+this.value).toFixed(2)"><span class="v">0.40</span></div>
+    <div class="r2"><button onclick="initAudio()">Init Audio</button><span class="st e" id="ast">not started</span></div>
+  </div>
+
+  <div class="sec">
+    <div class="t">Serial Monitor</div>
+    <div id="mon"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@ruby/4.0-wasm-wasi@2.8.1/dist/browser.script.iife.js"></script>
+<script type="text/ruby" src="src/ruby/js_bridge.rb"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/audio_adapter.rb"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/node.rb"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/osc_node.rb"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/fm_op_node.rb"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/filter_node.rb"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/gain_node.rb"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/mixer_node.rb"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/synth_patch.rb"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/web_adapter.rb"></script>
+<script type="text/ruby" src="src/ruby/serial_protocol.rb"></script>
+<script type="text/ruby" src="src/ruby/serial_manager.rb"></script>
+<script type="text/ruby" src="src/ruby/sensor_mapper.rb"></script>
+<script type="text/ruby" src="src/ruby/main.rb"></script>
+
+<script>
+// Global synth config
+let audioContext, _pending = null;
+window.synthMasterGain = 0.4;
+window.fmDepthScale = 400;
+
+// SynthPatch node graph runtime
+const sp = { nodes: {}, outputId: null, pitchIds: [] };
+let _prevActive = false;
+
+// Build Web Audio graph from Ruby JSON spec
+window.synthPatchBuild = function(json) {
+  if (!audioContext) { _pending = json; return; }
+  Object.values(sp.nodes).forEach(n => { try { n.disconnect(); } catch(_){} });
+  sp.nodes = {}; sp.outputId = null; sp.pitchIds = [];
+  const s = JSON.parse(json);
+  s.nodes.forEach(ns => {
+    let n;
+    if (ns.type === 'oscillator' || ns.type === 'fm_op') {
+      n = audioContext.createOscillator();
+      n.type = ns.params.waveform || 'sine';
+      n.frequency.value = +ns.params.frequency || 440;
+      if (ns.params.amplitude != null) {
+        const g = audioContext.createGain(); g.gain.value = +ns.params.amplitude;
+        n.connect(g); sp.nodes['_amp_' + ns.id] = g;
+      }
+    } else if (ns.type === 'filter') {
+      n = audioContext.createBiquadFilter();
+      n.type = ns.params.filter_type || 'lowpass';
+      n.frequency.value = +ns.params.cutoff || 1000;
+      n.Q.value = +ns.params.q || 1;
+    } else if (ns.type === 'gain' || ns.type === 'mixer') {
+      n = audioContext.createGain();
+      n.gain.value = ns.type === 'gain' ? (+ns.params.gain || 1) : 1;
+    }
+    if (n) sp.nodes[ns.id] = n;
+  });
+  s.connections.forEach(c => {
+    const f = sp.nodes['_amp_' + c.from] || sp.nodes[c.from], t = sp.nodes[c.to];
+    if (f && t) f.connect(t);
+  });
+  s.fm_connections.forEach(fm => {
+    const m = sp.nodes['_amp_' + fm.mod] || sp.nodes[fm.mod], c = sp.nodes[fm.carrier];
+    if (m && c && c.frequency) m.connect(c.frequency);
+  });
+  if (s.output_node) {
+    sp.outputId = s.output_node;
+    const on = sp.nodes[s.output_node];
+    if (on) { on.gain.value = 0; on.connect(audioContext.destination); }
+    const os = s.nodes.find(n => n.id === s.output_node);
+    if (os?.params.gain != null) { window.synthMasterGain = +os.params.gain; }
+  }
+  const mods = new Set(s.fm_connections.map(fm => fm.mod));
+  sp.pitchIds = s.nodes.filter(n => (n.type==='oscillator'||n.type==='fm_op') && !mods.has(n.id)).map(n => n.id);
+  s.nodes.forEach(n => { if (n.type==='oscillator'||n.type==='fm_op') { const o=sp.nodes[n.id]; if(o) try{o.start()}catch(_){} } });
+};
+
+// Update node parameter (called from Ruby via WebAdapter)
+window.synthPatchUpdateParam = function(name, param, val) {
+  const n = sp.nodes[name] || sp.nodes['_amp_' + name];
+  if (!n) return;
+  const pm = {frequency:'frequency',cutoff:'frequency',gain:'gain',q:'Q',waveform:'type',filter_type:'type',amplitude:'gain'};
+  const ap = pm[param] || param;
+  if (n[ap]?.setValueAtTime) n[ap].setValueAtTime(+val, audioContext.currentTime);
+  else if (n[ap] !== undefined) n[ap] = val;
+  if (name === sp.outputId && param === 'gain') window.synthMasterGain = +val;
+};
+
+// Theremin-style continuous synth update (called from Ruby every frame)
+window.updateSensorParams = function(freq, fmDepth, active) {
+  if (!audioContext || !sp.outputId) return;
+  const now = audioContext.currentTime, on = active !== 0;
+  sp.pitchIds.forEach(id => { const n = sp.nodes[id]; if (n?.frequency) n.frequency.setTargetAtTime(freq, now, 0.02); });
+  const fmAmp = sp.nodes['_amp_fm_mod']; if (fmAmp?.gain) fmAmp.gain.setTargetAtTime(fmDepth * window.fmDepthScale, now, 0.05);
+  const out = sp.nodes[sp.outputId]; if (out?.gain) out.gain.setTargetAtTime(on ? window.synthMasterGain : 0, now, on !== _prevActive ? 0.01 : 0.05);
+  _prevActive = on;
+};
+
+// UI callbacks (called from Ruby)
+window.updateSensorDisplay = function(d, ax, ay, az, f, fm) {
+  document.getElementById('vD').textContent = d;
+  document.getElementById('vF').textContent = f;
+  document.getElementById('vFM').textContent = (fm * 100).toFixed(0) + '%';
+  document.getElementById('vAX').textContent = ax;
+  document.getElementById('vAY').textContent = ay;
+  document.getElementById('vAZ').textContent = az;
+};
+window.updateSerialStatus = function(msg) {
+  const e = document.getElementById('sst'); e.textContent = msg;
+  e.className = msg.includes('connected at') ? 'st' : 'st e';
+  document.getElementById('bCon').disabled = msg.includes('connected at');
+  document.getElementById('bDis').disabled = !msg.includes('connected at');
+};
+window.updateSerialMonitor = function(line) {
+  const e = document.getElementById('mon'); e.textContent = (line + '\n' + e.textContent).substring(0, 2000);
+};
+
+// Web Serial
+let _port, _reader;
+async function serialConnect() {
+  try {
+    _port = await navigator.serial.requestPort();
+    const baud = +document.getElementById('baud').value;
+    await _port.open({ baudRate: baud });
+    const dec = new TextDecoderStream(); _port.readable.pipeTo(dec.writable);
+    _reader = dec.readable.getReader();
+    if (window.rubySerialOnConnect) window.rubySerialOnConnect(baud);
+    (async () => {
+      try { while (_port) { const { value, done } = await _reader.read(); if (done) break; if (value && window.rubySerialOnReceive) window.rubySerialOnReceive(value); } }
+      catch(e) { console.error('[Serial]', e); }
+      finally { _port = null; if (window.rubySerialOnDisconnect) window.rubySerialOnDisconnect(); }
+    })();
+  } catch(e) { document.getElementById('sst').textContent = e.message; }
+}
+async function serialDisconnect() {
+  if (_reader) { try { await _reader.cancel(); } catch(_){} }
+  if (_port) { try { await _port.close(); } catch(_){} _port = null; }
+  if (window.rubySerialOnDisconnect) window.rubySerialOnDisconnect();
+}
+
+// Audio init (user gesture required)
+async function initAudio() {
+  audioContext = audioContext || new AudioContext();
+  if (audioContext.state === 'suspended') await audioContext.resume();
+  document.getElementById('ast').textContent = audioContext.state;
+  document.getElementById('ast').className = 'st';
+  if (_pending) window.synthPatchBuild(_pending);
+}
+
+// Filter type toggle
+function setFT(type, btn) {
+  document.querySelectorAll('.sec button[onclick^="setFT"]').forEach(b => b.style.cssText = '');
+  btn.style.borderColor = '#0f0'; btn.style.color = '#0f0';
+  const n = sp.nodes['filter']; if (n?.type !== undefined) n.type = type;
+}
+
+// Param update dispatch to Ruby
+function p(key, val) { if (window.rubyOnParamUpdate) window.rubyOnParamUpdate(key, +val); }
+</script>
+</body>
+</html>
