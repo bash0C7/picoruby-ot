@@ -1,7 +1,46 @@
+set(PICORB_VM "mrubyc" CACHE STRING "Select build mode (mrubyc or mruby)")
+message(STATUS "PICORB_VM is set to: ${PICORB_VM}")
+
+file(MAKE_DIRECTORY ${COMPONENT_DIR}/picoruby/mrbgems/picoruby-mbedtls/lib/mbedtls/include)
+
+if(${PICORB_VM} STREQUAL "mruby")
+  file(MAKE_DIRECTORY ${COMPONENT_DIR}/picoruby/build/esp32-microruby/include)
+  set(MRUBY_CONFIG_STRING "${COMPONENT_DIR}/build_config/${IDF_TARGET_ARCH}-esp-microruby.rb")
+  set(LIBMRUBY_PATH "esp32-microruby")
+  set(CUSTOM_TARGET_NAME "microruby")
+  set(ADDITIONAL_INCLUDE_DIRS
+    ${COMPONENT_DIR}/picoruby/build/esp32-microruby/include
+    ${COMPONENT_DIR}/picoruby/mrbgems/picoruby-mruby/lib/mruby/include
+  )
+  set(ADDITIONAL_DEFINITIONS
+    -DMRB_TICK_UNIT=10
+    -DMRB_TIMESLICE_TICK_COUNT=1
+    -DMRB_INT64=1
+    -DPICORB_VM_MRUBY
+  )
+else()
+  file(MAKE_DIRECTORY ${COMPONENT_DIR}/picoruby/build/esp32/mrbgems)
+  set(MRUBY_CONFIG_STRING "${COMPONENT_DIR}/build_config/${IDF_TARGET_ARCH}-esp.rb")
+  set(LIBMRUBY_PATH "esp32")
+  set(CUSTOM_TARGET_NAME "picoruby")
+  set(ADDITIONAL_INCLUDE_DIRS
+    ${COMPONENT_DIR}/picoruby/build/esp32/mrbgems
+  )
+  set(ADDITIONAL_DEFINITIONS
+    -DMRBC_TICK_UNIT=10
+    -DMRBC_TIMESLICE_TICK_COUNT=1
+    -DMRBC_USE_FLOAT=2
+    -DMRC_CUSTOM_ALLOC
+    -DPICORB_VM_MRUBYC
+  )
+endif()
+
 idf_component_register(
   SRCS
     ${COMPONENT_DIR}/picoruby-esp32.c
+    ${COMPONENT_DIR}/picoruby/mrbgems/picoruby-esp32/ports/esp32.c
     ${COMPONENT_DIR}/picoruby/mrbgems/picoruby-machine/ports/esp32/machine.c
+    ${COMPONENT_DIR}/picoruby/mrbgems/picoruby-machine/ports/common/machine.c
     ${COMPONENT_DIR}/picoruby/mrbgems/picoruby-io-console/ports/esp32/io-console.c
     ${COMPONENT_DIR}/picoruby/mrbgems/picoruby-filesystem-fat/ports/esp32/flash_disk.c
     ${COMPONENT_DIR}/picoruby/mrbgems/picoruby-env/ports/esp32/env.c
@@ -14,6 +53,16 @@ idf_component_register(
     ${COMPONENT_DIR}/picoruby/mrbgems/picoruby-watchdog/ports/esp32/watchdog.c
     ${COMPONENT_DIR}/picoruby/mrbgems/picoruby-mbedtls/ports/esp32/timing_alt.c
     ${COMPONENT_DIR}/picoruby/mrbgems/picoruby-mbedtls/ports/common/cipher.c
+    ${COMPONENT_DIR}/picoruby/mrbgems/picoruby-mbedtls/ports/common/cmac.c
+    ${COMPONENT_DIR}/picoruby/mrbgems/picoruby-mbedtls/ports/common/digest.c
+    ${COMPONENT_DIR}/picoruby/mrbgems/picoruby-mbedtls/ports/common/hmac.c
+    ${COMPONENT_DIR}/picoruby/mrbgems/picoruby-mbedtls/ports/common/pkey.c
+    ${COMPONENT_DIR}/picoruby/mrbgems/picoruby-mbedtls/ports/common/md.c
+    ${COMPONENT_DIR}/picoruby/mrbgems/picoruby-socket/ports/esp32/net_helpers.c
+    ${COMPONENT_DIR}/picoruby/mrbgems/picoruby-socket/ports/esp32/ssl_socket.c
+    ${COMPONENT_DIR}/picoruby/mrbgems/picoruby-socket/ports/esp32/tcp_server.c
+    ${COMPONENT_DIR}/picoruby/mrbgems/picoruby-socket/ports/esp32/tcp_socket.c
+    ${COMPONENT_DIR}/picoruby/mrbgems/picoruby-socket/ports/esp32/udp_socket.c
     ${COMPONENT_DIR}/picoruby/mrbgems/picoruby-i2c/ports/esp32/i2c.c
     ${COMPONENT_DIR}/picoruby/mrbgems/picoruby-uart/ports/esp32/uart.c
     ${COMPONENT_DIR}/picoruby/mrbgems/picoruby-irq/ports/esp32/irq.c
@@ -27,6 +76,7 @@ idf_component_register(
     ${COMPONENT_DIR}/picoruby/mrbgems/picoruby-filesystem-fat/ports/esp32
     ${COMPONENT_DIR}/picoruby/mrbgems/mruby-compiler2/include
     ${COMPONENT_DIR}/picoruby/mrbgems/mruby-compiler2/lib/prism/include
+    ${ADDITIONAL_INCLUDE_DIRS}
   PRIV_REQUIRES
     esp_driver_gpio
     esp_driver_uart
@@ -38,29 +88,27 @@ idf_component_register(
     esp_timer
     esp_hw_support
     spi_flash
+    nvs_flash
+    esp_wifi
+    esp_psram
 )
 
 add_definitions(
-  -DMRBC_TICK_UNIT=10
-  -DMRBC_TIMESLICE_TICK_COUNT=1
-  -DMRBC_USE_FLOAT=2
-  -DMRC_CUSTOM_ALLOC
+  ${ADDITIONAL_DEFINITIONS}
   -DMRBC_CONVERT_CRLF=1
   -DUSE_FAT_FLASH_DISK
+  -DESP32_PLATFORM
   -DNDEBUG
-
-  # for picoruby.h
-  -DPICORB_VM_MRUBYC
 )
 
 set(PICORUBY_DIR ${COMPONENT_DIR}/picoruby)
-set(LIBMRUBY_FILE ${PICORUBY_DIR}/build/esp32/lib/libmruby.a)
+set(LIBMRUBY_FILE ${PICORUBY_DIR}/build/${LIBMRUBY_PATH}/lib/libmruby.a)
 
 # Build PicoRuby
 add_custom_command(
   OUTPUT ${LIBMRUBY_FILE}
-  COMMAND ${CMAKE_COMMAND} -E echo "MRUBY_CONFIG=${IDF_TARGET_ARCH}-esp rake"
-  COMMAND ${CMAKE_COMMAND} -E env MRUBY_CONFIG=${IDF_TARGET_ARCH}-esp rake
+  COMMAND ${CMAKE_COMMAND} -E echo "MRUBY_CONFIG=${MRUBY_CONFIG_STRING} rake"
+  COMMAND ${CMAKE_COMMAND} -E env MRUBY_CONFIG=${MRUBY_CONFIG_STRING} rake
   WORKING_DIRECTORY ${PICORUBY_DIR}
   COMMENT "PicoRuby build"
   VERBATIM
@@ -76,14 +124,13 @@ target_include_directories(
   PRIVATE
     ${COMPONENT_DIR}/picoruby/mrbgems/mruby-compiler2/include
     ${COMPONENT_DIR}/picoruby/mrbgems/mruby-compiler2/lib/prism/include
-    ${COMPONENT_DIR}/picoruby/build/esp32/mrbgems
+    ${ADDITIONAL_INCLUDE_DIRS}
 )
 
 add_custom_target(
-  picoruby DEPENDS ${LIBMRUBY_FILE}
-  DEPENDS ${LIBMRUBY_FILE}
+  ${CUSTOM_TARGET_NAME} DEPENDS ${LIBMRUBY_FILE}
 )
-add_dependencies(${COMPONENT_LIB} picoruby)
+add_dependencies(${COMPONENT_LIB} ${CUSTOM_TARGET_NAME})
 
 # Compile Ruby files
 set(RUBY_FILES main_task)
@@ -98,7 +145,7 @@ foreach(rb ${RUBY_FILES})
     COMMAND ${CMAKE_COMMAND} -E echo "Compiling ${RB_FILE}..."
     COMMAND ${CMAKE_COMMAND} -E make_directory ${COMPONENT_DIR}/mrb
     COMMAND ${PICORBC} -B${rb} -o${C_FILE} ${RB_FILE}
-    DEPENDS picoruby ${RB_FILE}
+    DEPENDS ${CUSTOM_TARGET_NAME} ${RB_FILE}
     COMMENT "Compiling ${RB_FILE}"
     VERBATIM
   )
@@ -106,3 +153,4 @@ foreach(rb ${RUBY_FILES})
 endforeach(rb)
 
 target_sources(${COMPONENT_LIB} PRIVATE ${GENERATED_C_FILES})
+
