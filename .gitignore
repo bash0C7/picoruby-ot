@@ -73,6 +73,7 @@ Thumbs.db
 /components/
 .claude/*
 !.claude/skills/
+!.claude/agents/
 
 # Compiled Ruby files (storage only)
 src_components/R2P2-ESP32/storage/home/*.mrb
