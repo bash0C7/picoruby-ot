@@ -73,10 +73,10 @@ class SensorInstrument
     @sound_on = !@sound_on
     if @sound_on
       # キャリブレーション: 現在の加速度をベースラインとして記録
-      raw = @accel_sensor.accel
-      @accel_baseline_x = raw[0]
-      @accel_baseline_y = raw[1]
-      @accel_baseline_z = raw[2]
+      raw = @accel_sensor.acceleration
+      @accel_baseline_x = raw[:x]
+      @accel_baseline_y = raw[:y]
+      @accel_baseline_z = raw[:z]
     end
   end
 
@@ -90,11 +90,11 @@ class SensorInstrument
       @prev_distance = @distance
     end
 
-    # 加速度計測 (baseline差分)
-    raw = @accel_sensor.accel
-    @ax = raw[0] - @accel_baseline_x
-    @ay = raw[1] - @accel_baseline_y
-    @az = raw[2] - @accel_baseline_z
+    # 加速度計測 (baseline差分、milliG整数変換)
+    raw = @accel_sensor.acceleration
+    @ax = ((raw[:x] - @accel_baseline_x) * 1000).to_i
+    @ay = ((raw[:y] - @accel_baseline_y) * 1000).to_i
+    @az = ((raw[:z] - @accel_baseline_z) * 1000).to_i
   end
 
   def send_frame
