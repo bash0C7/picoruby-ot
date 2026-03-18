@@ -442,6 +442,119 @@ task :monitor do
   puts "monitor completed successfully"
 end
 
+# ローカルWebサーバー設定
+SERVER_PID_FILE = 'web/server.pid'
+SERVER_PORT     = 8000
+SERVER_LOG      = 'web/server.log'
+SERVER_ROOT     = 'web'
+SERVER_SCRIPT   = 'web/server.rb'
+
+def server_process_running?(pid)
+  Process.kill(0, pid)
+  true
+rescue Errno::ESRCH, Errno::EPERM
+  false
+end
+
+def server_port_in_use?(port)
+  result = `lsof -i :#{port} 2>/dev/null`
+  !result.empty?
+end
+
+namespace :server do
+  desc "ローカルHTTPサーバー起動（port #{SERVER_PORT}、バックグラウンド）"
+  task :start do
+    if File.exist?(SERVER_PID_FILE)
+      pid = File.read(SERVER_PID_FILE).strip.to_i
+      if server_process_running?(pid)
+        puts "サーバーは既に起動中 (PID: #{pid})"
+        puts "Access: http://localhost:#{SERVER_PORT}/"
+        next
+      else
+        puts "古いPIDファイルを削除..."
+        File.delete(SERVER_PID_FILE)
+      end
+    end
+
+    if server_port_in_use?(SERVER_PORT)
+      puts "Error: port #{SERVER_PORT} は既に使用中"
+      exit 1
+    end
+
+    puts "サーバー起動中 (port #{SERVER_PORT})..."
+    pid = spawn(
+      RbConfig.ruby, SERVER_SCRIPT, SERVER_PORT.to_s, SERVER_ROOT,
+      out: SERVER_LOG, err: SERVER_LOG
+    )
+    Process.detach(pid)
+    File.write(SERVER_PID_FILE, pid)
+
+    sleep 1
+    if server_process_running?(pid)
+      puts "サーバー起動完了 (PID: #{pid})"
+      puts "Access:  http://localhost:#{SERVER_PORT}/"
+      puts "Log:     #{SERVER_LOG}"
+      system('open', "http://localhost:#{SERVER_PORT}/")
+    else
+      puts "サーバー起動失敗。ログを確認: #{SERVER_LOG}"
+      File.delete(SERVER_PID_FILE) if File.exist?(SERVER_PID_FILE)
+      exit 1
+    end
+  end
+
+  desc "ローカルHTTPサーバー停止"
+  task :stop do
+    unless File.exist?(SERVER_PID_FILE)
+      puts "サーバーは起動していない (PIDファイルなし)"
+      next
+    end
+
+    pid = File.read(SERVER_PID_FILE).strip.to_i
+    unless server_process_running?(pid)
+      puts "サーバーは起動していない (古いPIDファイル)"
+      File.delete(SERVER_PID_FILE)
+      next
+    end
+
+    puts "サーバー停止中 (PID: #{pid})..."
+    Process.kill('TERM', pid)
+
+    10.times do
+      sleep 0.5
+      unless server_process_running?(pid)
+        File.delete(SERVER_PID_FILE)
+        puts "サーバー停止完了"
+        break
+      end
+    end
+
+    if File.exist?(SERVER_PID_FILE)
+      Process.kill('KILL', pid) rescue nil
+      File.delete(SERVER_PID_FILE)
+      puts "サーバーを強制停止"
+    end
+  end
+
+  desc "ローカルHTTPサーバー再起動"
+  task restart: [:stop, :start]
+
+  desc "ローカルHTTPサーバーの状態確認"
+  task :status do
+    if File.exist?(SERVER_PID_FILE)
+      pid = File.read(SERVER_PID_FILE).strip.to_i
+      if server_process_running?(pid)
+        puts "起動中 (PID: #{pid})"
+        puts "Access: http://localhost:#{SERVER_PORT}/"
+      else
+        puts "停止中 (古いPIDファイルあり)"
+      end
+    else
+      puts "停止中"
+    end
+    puts "Port #{SERVER_PORT}: #{server_port_in_use?(SERVER_PORT) ? '使用中' : '空き'}"
+  end
+end
+
 desc "環境チェック：ESP-IDF環境とコマンドの確認"
 task :check_env do
   setup_environment
