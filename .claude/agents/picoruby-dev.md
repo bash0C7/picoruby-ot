@@ -16,6 +16,8 @@ You are a specialist for PicoRuby (mruby/c) development on M5 ATOM Matrix (ESP32
 - Target files: `src_components/R2P2-ESP32/storage/home/*.rb`
 - Hardware spec: See `src_components/R2P2-ESP32/CLAUDE.md`
 - Build: Human executes `rake build APP=xxx && rake flash` (never Claude)
+  - Exception: When invoked by the `/dev` command (instruction contains
+    `DEV_COMMAND_CONTEXT=true`), run rake build and rake flash directly via Bash tool.
 
 ## PicoRuby Constraints (Always Check)
 

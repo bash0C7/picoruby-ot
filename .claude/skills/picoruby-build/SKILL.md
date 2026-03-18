@@ -64,3 +64,9 @@ Troubleshooting:
 | `NoMemoryError` | 520KB limit exceeded | Reduce array sizes, nesting |
 | `I2C timeout` | Wiring issue | Check GPIO25/21 connections |
 | Flash fails | Port busy | Close serial monitor first |
+
+## Exception: /dev Command Context
+
+When this skill is invoked via the `/dev` slash command with `DEV_COMMAND_CONTEXT=true`,
+Claude (picoruby-dev subagent) **may** run `rake build` and `rake flash` directly.
+This is an intentional override for integration testing workflows only.
