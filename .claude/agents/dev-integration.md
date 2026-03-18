@@ -7,129 +7,156 @@ model: sonnet
 
 # Dev Integration Test Agent
 
-Full integration test for picoruby-ot. Returns a structured report.
+Execute each step below IN ORDER. Do not skip any step unless the skip condition is met.
 
-## CRITICAL EXECUTION RULES
+---
 
-**Execute ALL phases in sequence. Never skip a phase unless its own section says to skip it.**
+## Step 0 — Parse Arguments
 
-The only valid skip conditions are:
-- Phase 2: skip only if `--skip-build` is literally in the arguments
-- Phase 4-8: skip only if `--no-browser` is literally in the arguments
-- Phase 9: skip only if `--debug` is NOT in the arguments
+Read the prompt. Extract:
+- `APP` = value after `APP=` (default: `otmeiwa`)
+- `SKIP_BUILD` = true if `--skip-build` is present, otherwise false
+- `NO_BROWSER` = true if `--no-browser` is present, otherwise false
+- `DEBUG` = true if `--debug` is present, otherwise false
+- `DURATION` = value after `DURATION=` (default: `60`)
 
-All other phases run unconditionally. Device not connected is NOT a reason to skip.
+---
 
-## Phase 0 — Parse Arguments
+## Step 1 — Environment Check
 
-Parse the prompt for:
-- `APP=xxx` (default: `otmeiwa`)
-- `--skip-build` flag
-- `--no-browser` flag
-- `--debug` flag
-- `DURATION=N` (default: 60, only with `--debug`)
-
-## Phase 1 — Environment Check
-
+Execute:
 ```bash
 cd /Users/bash/dev/src/github.com/bash0C7/picoruby-ot && bundle exec rake check_env
 ```
 
-If it fails → **STOP** and report error.
+If exit code is non-zero → STOP. Report error.
 
-## Phase 2 — Build + Flash
+---
 
-**MANDATORY** unless the literal string `--skip-build` appears in the arguments.
-Do NOT skip this phase for any other reason (e.g. device not connected, previous run, etc.).
+## Step 2 — Build
 
-If `--skip-build` is present → mark as ⏭️ skipped in report, proceed to Phase 3.
-
-Otherwise, run sequentially via Bash:
+**Skip condition: SKIP_BUILD is true.**
+Otherwise, execute regardless of whether a device is connected:
 
 ```bash
 cd /Users/bash/dev/src/github.com/bash0C7/picoruby-ot && bundle exec rake build APP=<APP>
 ```
 
-If build exit code is 0, then run:
+If exit code is non-zero → STOP. Report build error output.
+
+---
+
+## Step 3 — Flash
+
+**Skip condition: SKIP_BUILD is true.**
+Otherwise, execute regardless of whether a device appears connected:
+
 ```bash
 cd /Users/bash/dev/src/github.com/bash0C7/picoruby-ot && bundle exec rake flash
 ```
 
-- Build non-zero exit → **STOP**, report error
-- Flash non-zero exit → mark as ⚠️ in report, continue to Phase 3 (device may not be connected)
+If exit code is non-zero → record as ⚠️ (device may not be connected), continue to Step 4.
 
-## Phase 3 — Web Server
+---
 
+## Step 4 — Web Server
+
+Execute:
 ```bash
 cd /Users/bash/dev/src/github.com/bash0C7/picoruby-ot && bundle exec rake server:status
 ```
 
-If not running:
+If server is not running, execute:
 ```bash
 cd /Users/bash/dev/src/github.com/bash0C7/picoruby-ot && bundle exec rake server:start
 ```
 
-If server fails to start → **STOP**.
+If server fails to start → STOP. Report error.
 
-## Phase 4 — Chrome Navigation (unless --no-browser)
+---
 
-1. `mcp__claude-in-chrome__tabs_context_mcp` — check existing tabs
-2. `mcp__claude-in-chrome__tabs_create_mcp` — create new tab
-3. `mcp__claude-in-chrome__navigate` → `http://localhost:8000/`
-4. `sleep 3` — wait for ruby.wasm init
+## Step 5 — Chrome Navigation
 
-## Phase 5 — Console Error Check
+**Skip condition: NO_BROWSER is true.**
+Otherwise:
 
-`mcp__claude-in-chrome__read_console_messages` pattern: `"Error|Uncaught|net::ERR_"`
+1. Call `mcp__claude-in-chrome__tabs_context_mcp`
+2. Call `mcp__claude-in-chrome__tabs_create_mcp`
+3. Call `mcp__claude-in-chrome__navigate` with URL `http://localhost:8000/`
+4. Execute `sleep 3` via Bash to wait for ruby.wasm init
 
-Expected: 0 matches.
+---
 
-## Phase 6 — ruby.wasm Init Check
+## Step 6 — Console: JS Errors
 
-`mcp__claude-in-chrome__read_console_messages` pattern: `"Ruby|SynthApp|rubySerial"`
+**Skip condition: NO_BROWSER is true.**
 
-Expected: at least 1 match.
+Call `mcp__claude-in-chrome__read_console_messages` with pattern `"Error|Uncaught|net::ERR_"`.
+Record count. Expected: 0.
 
-## Phase 7 — UI Element Check
+---
 
-`mcp__claude-in-chrome__get_page_text` — verify title contains "picoruby-ot" or "synth", "Connect" button present.
+## Step 7 — Console: ruby.wasm Init
 
-## Phase 8 — Screenshot
+**Skip condition: NO_BROWSER is true.**
 
-`mcp__claude-in-chrome__computer` — capture screenshot.
+Call `mcp__claude-in-chrome__read_console_messages` with pattern `"Ruby|SynthApp|rubySerial"`.
+Record messages. Expected: at least 1.
 
-## Phase 9 — Serial Capture
+---
 
-If `--debug` is NOT in the arguments → mark as ⏭️ skipped in report, proceed to Phase 10.
+## Step 8 — UI Check
 
-If `--debug` IS present → **MANDATORY**. Run regardless of device connection status.
+**Skip condition: NO_BROWSER is true.**
 
-Replace `<DURATION>` with the parsed DURATION value (default 60):
+Call `mcp__claude-in-chrome__get_page_text`. Verify:
+- Title contains "picoruby-ot" or "synth"
+- "Connect" button text present
+
+---
+
+## Step 9 — Screenshot
+
+**Skip condition: NO_BROWSER is true.**
+
+Call `mcp__claude-in-chrome__computer` to capture screenshot.
+
+---
+
+## Step 10 — Serial Capture
+
+**Skip condition: DEBUG is false.**
+Otherwise, execute regardless of whether a device is connected:
 
 ```bash
-cd /Users/bash/dev/src/github.com/bash0C7/picoruby-ot && timeout <DURATION> bundle exec rake monitor 2>&1; echo "EXIT:$?"
+cd /Users/bash/dev/src/github.com/bash0C7/picoruby-ot && timeout <DURATION> bundle exec rake monitor 2>&1; echo "EXIT_CODE:$?"
 ```
 
-Exit status interpretation (read from `EXIT:N` in output):
-- **124** = timeout expired = normal ✅
-- **0** = monitor exited cleanly = normal ✅
-- **other** = error (device not connected, port busy, etc.) = ⚠️ warn, do NOT stop
+Parse the output:
+- Look for `EXIT_CODE:N` at the end. 124 = timeout = normal ✅. Other non-zero = ⚠️.
+- Count lines matching `<D:\d+,AX:-?\d+,AY:-?\d+,AZ:-?\d+>` → valid frames
+- FPS = valid_frames / DURATION
+- Count D:8190 (out-of-range) and D:0 (not initialized) frames
+- Record first 3 and last 3 valid frames as samples
 
-Parse output for valid frames matching `<D:\d+,AX:-?\d+,AY:-?\d+,AZ:-?\d+>`:
-- Count total valid frames
-- FPS estimate = frames / DURATION
-- Error frames: D value is 8190 (out-of-range) or 0 (not initialized)
-- Report first 3 and last 3 valid frames as samples
+---
 
-| Item | Expected |
-|------|----------|
-| FPS | ~20 fps |
-| D:8190 ratio | < 5% |
-| D:0 count | 0 |
+## Step 11 — Chrome: Sensor Signal Check
 
-## Phase 10 — Manual Gate (Web Serial)
+**Skip condition: DEBUG is false OR NO_BROWSER is true.**
 
-Report to user:
+After serial capture, check if Chrome received any sensor data:
+
+Call `mcp__claude-in-chrome__read_console_messages` with pattern `"serial|Serial|D:|sensor|Sensor"`.
+Record messages. If any serial data logged → signals are reaching the web synth.
+
+Also call `mcp__claude-in-chrome__get_page_text` and check if sensor values changed from "--".
+
+---
+
+## Step 12 — Manual Gate (Web Serial)
+
+Always execute this step. Report:
 
 ```
 Web Serial の接続には手動操作が必要ですピョン。
@@ -140,26 +167,29 @@ Web Serial の接続には手動操作が必要ですピョン。
 4. otmeiwa からのセンサーデータが流れ始めることを確認
 ```
 
-## Phase 11 — Results Report
+---
+
+## Step 13 — Results Report
+
+Output the full results table:
 
 ```markdown
 ## /dev Integration Test Results
 
-| Phase | Item | Result | Notes |
-|-------|------|--------|-------|
-| 1 | Environment check | ✅/❌ | ... |
-| 2 | rake build APP=<APP> | ✅/⏭️/❌ | ... |
-| 2 | rake flash | ✅/⚠️/⏭️ | ... |
-| 3 | Web server | ✅/❌ | ... |
-| 4 | Page load | ✅/❌ | ... |
-| 5 | JS errors | ✅/⚠️ | count: N |
-| 6 | ruby.wasm init | ✅/❌ | ... |
-| 7 | UI elements | ✅/❌ | ... |
-| 9 | Serial frames | ✅/⚠️/⏭️ | N fps, N errors |
+| Step | Item | Result | Notes |
+|------|------|--------|-------|
+| 1 | check_env | ✅/❌ | |
+| 2 | rake build APP=<APP> | ✅/⏭️/❌ | |
+| 3 | rake flash | ✅/⚠️/⏭️ | |
+| 4 | Web server | ✅/❌ | |
+| 5 | Page load | ✅/⏭️/❌ | |
+| 6 | JS errors | ✅/⚠️/⏭️ | count: N |
+| 7 | ruby.wasm init | ✅/❌/⏭️ | |
+| 8 | UI elements | ✅/❌/⏭️ | |
+| 10 | Serial capture | ✅/⚠️/⏭️ | N fps, N err frames |
+| 11 | Web signal check | ✅/⚠️/⏭️ | |
 
 **Overall: PASS / PARTIAL / FAIL**
-
-⚠️ Web Serial: 手動接続が必要です（上記 Phase 10 参照）
 ```
 
 Legend: ✅ pass · ❌ fail · ⚠️ warning · ⏭️ skipped
