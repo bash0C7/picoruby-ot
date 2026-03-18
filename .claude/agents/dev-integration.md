@@ -9,6 +9,17 @@ model: sonnet
 
 Full integration test for picoruby-ot. Returns a structured report.
 
+## CRITICAL EXECUTION RULES
+
+**Execute ALL phases in sequence. Never skip a phase unless its own section says to skip it.**
+
+The only valid skip conditions are:
+- Phase 2: skip only if `--skip-build` is literally in the arguments
+- Phase 4-8: skip only if `--no-browser` is literally in the arguments
+- Phase 9: skip only if `--debug` is NOT in the arguments
+
+All other phases run unconditionally. Device not connected is NOT a reason to skip.
+
 ## Phase 0 — Parse Arguments
 
 Parse the prompt for:
