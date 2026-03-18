@@ -36,7 +36,7 @@ Report parsed args to user before proceeding.
 
 ### Phase 1 — Environment Check
 
-Run `rake check_env` via Bash tool.
+Run `bundle exec rake check_env` via Bash tool.
 
 If it fails → **STOP** and report error.
 
@@ -65,9 +65,9 @@ Note: Flash failure (device not connected) is non-fatal — report warning and c
 Check server status, then start if needed:
 
 ```bash
-rake server:status
+bundle exec rake server:status
 # If not running:
-rake server:start
+bundle exec rake server:start
 ```
 
 Use Bash tool directly (rake server tasks are always permitted).
@@ -122,7 +122,7 @@ Delegate to **serial-monitor subagent** with:
 
 ```
 DURATION=<DURATION>
-Run: timeout <DURATION> rake monitor 2>&1
+Run: timeout <DURATION> bundle exec rake monitor 2>&1
 Capture all output.
 Return:
 - first 5 and last 5 valid frames

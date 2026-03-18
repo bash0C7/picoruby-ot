@@ -7,7 +7,7 @@ model: haiku
 
 # Serial Monitor Capture Agent
 
-Captures `rake monitor` output for a fixed duration and returns parsed results.
+Captures `bundle exec rake monitor` output for a fixed duration and returns parsed results.
 
 ## Task
 
@@ -16,7 +16,7 @@ You will receive a task with `DURATION=N` specified.
 Run the following command via Bash tool:
 
 ```bash
-cd /Users/bash/dev/src/github.com/bash0C7/picoruby-ot && timeout <DURATION> rake monitor 2>&1
+cd /Users/bash/dev/src/github.com/bash0C7/picoruby-ot && timeout <DURATION> bundle exec rake monitor 2>&1
 ```
 
 Replace `<DURATION>` with the value provided.
