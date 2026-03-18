@@ -78,3 +78,7 @@ Thumbs.db
 
 # Compiled Ruby files (storage only)
 src_components/R2P2-ESP32/storage/home/*.mrb
+
+# Web server runtime files
+web/server.log
+web/server.pid
