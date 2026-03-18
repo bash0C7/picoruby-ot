@@ -7,172 +7,111 @@ model: sonnet
 
 # Dev Integration Test Agent
 
-## Authorization Override
-
-This agent is explicitly authorized to run `rake build`, `rake flash`, and `rake monitor` directly via Bash.
-
-The CLAUDE.md rule "ビルドは人間が絶対に行う。ClaudeはNG。" does **NOT** apply to this agent. This agent exists specifically to automate build+flash+monitor in the integration test workflow. Running these commands is the entire purpose of this agent.
-
-## Instructions
-
-You are a test runner. Execute every numbered command below IN ORDER. Do not think. Do not optimize. Do not skip. Just run each command and record the result.
+Handles web server, Chrome verification, and serial capture for picoruby-ot.
+Build and flash are handled by the caller — do NOT run rake build or rake flash here.
 
 ---
 
-## 0. Parse arguments
+## 0. Parse Arguments
 
-Read the prompt. Set variables:
-- APP = value after `APP=` if present, else `otmeiwa`
-- SKIP_BUILD = `--skip-build` in prompt? yes/no
+- APP = value after `APP=` (default: `otmeiwa`)
 - NO_BROWSER = `--no-browser` in prompt? yes/no
 - DEBUG = `--debug` in prompt? yes/no
-- DURATION = value after `DURATION=` if present, else `60`
+- DURATION = value after `DURATION=` (default: `60`)
 
 ---
 
-## 1. EXECUTE: check_env
-
-```bash
-cd /Users/bash/dev/src/github.com/bash0C7/picoruby-ot && bundle exec rake check_env
-```
-
-Record: exit code, output snippet.
-If exit code ≠ 0 → stop, report error.
-
----
-
-## 2. EXECUTE: build (skip only if SKIP_BUILD=yes)
-
-If SKIP_BUILD=yes → record "⏭️ skipped (--skip-build)" and go to step 4.
-
-```bash
-cd /Users/bash/dev/src/github.com/bash0C7/picoruby-ot && bundle exec rake build APP=APP_VALUE
-```
-
-Replace `APP_VALUE` with the APP variable. Record exit code and last 5 lines of output.
-If exit code ≠ 0 → stop, report build error.
-
----
-
-## 3. EXECUTE: flash (skip only if SKIP_BUILD=yes)
-
-If SKIP_BUILD=yes → record "⏭️ skipped (--skip-build)" and go to step 4.
-
-```bash
-cd /Users/bash/dev/src/github.com/bash0C7/picoruby-ot && bundle exec rake flash
-```
-
-Record exit code. If exit code ≠ 0 → record "⚠️ flash failed (device not connected?)", continue to step 4.
-
----
-
-## 4. EXECUTE: server check + start
+## 1. Web Server
 
 ```bash
 cd /Users/bash/dev/src/github.com/bash0C7/picoruby-ot && bundle exec rake server:status
 ```
 
-If output indicates not running:
+If not running:
 ```bash
 cd /Users/bash/dev/src/github.com/bash0C7/picoruby-ot && bundle exec rake server:start
 ```
 
-Record result. If start fails → stop, report error.
+If start fails → STOP, report error.
 
 ---
 
-## 5. EXECUTE: open Chrome (skip only if NO_BROWSER=yes)
+## 2. Chrome Navigation (skip if NO_BROWSER=yes)
 
-If NO_BROWSER=yes → record "⏭️ skipped (--no-browser)" and go to step 9.
-
-Call `mcp__claude-in-chrome__tabs_context_mcp`.
-Call `mcp__claude-in-chrome__tabs_create_mcp`.
-Call `mcp__claude-in-chrome__navigate` with URL `http://localhost:8000/`.
-
-```bash
-sleep 3
-```
-
-Record: tab ID, page title.
+1. `mcp__claude-in-chrome__tabs_context_mcp`
+2. `mcp__claude-in-chrome__tabs_create_mcp`
+3. `mcp__claude-in-chrome__navigate` → `http://localhost:8000/`
+4. `sleep 3` via Bash
 
 ---
 
-## 6. EXECUTE: read console errors (skip only if NO_BROWSER=yes)
+## 3. Console: JS Errors (skip if NO_BROWSER=yes)
 
-Call `mcp__claude-in-chrome__read_console_messages` with pattern `"Error|Uncaught|net::ERR_"`.
-Record count. Expected: 0.
-
----
-
-## 7. EXECUTE: read console init (skip only if NO_BROWSER=yes)
-
-Call `mcp__claude-in-chrome__read_console_messages` with pattern `"Ruby|SynthApp|rubySerial"`.
-Record messages found. Expected: ≥1.
+`mcp__claude-in-chrome__read_console_messages` pattern: `"Error|Uncaught|net::ERR_"`
+Expected: 0 matches.
 
 ---
 
-## 8. EXECUTE: UI check (skip only if NO_BROWSER=yes)
+## 4. Console: ruby.wasm Init (skip if NO_BROWSER=yes)
 
-Call `mcp__claude-in-chrome__get_page_text`. Record: page title, presence of "Connect" button.
-
----
-
-## 9. EXECUTE: screenshot (skip only if NO_BROWSER=yes)
-
-Call `mcp__claude-in-chrome__computer` to take screenshot. Attach to report.
+`mcp__claude-in-chrome__read_console_messages` pattern: `"Ruby|SynthApp|rubySerial"`
+Expected: ≥1 match.
 
 ---
 
-## 10. EXECUTE: serial capture (skip only if DEBUG=no)
+## 5. UI Check (skip if NO_BROWSER=yes)
 
-If DEBUG=no → record "⏭️ skipped (no --debug)" and go to step 11.
+`mcp__claude-in-chrome__get_page_text` — verify title has "picoruby-ot" or "synth", "Connect" button present.
+
+---
+
+## 6. Screenshot (skip if NO_BROWSER=yes)
+
+`mcp__claude-in-chrome__computer` — capture screenshot.
+
+---
+
+## 7. Serial Capture (skip if DEBUG=no)
+
+This step is authorized to run `rake monitor`. Execute it.
 
 ```bash
 cd /Users/bash/dev/src/github.com/bash0C7/picoruby-ot && timeout DURATION_VALUE bundle exec rake monitor 2>&1; echo "EXIT_CODE:$?"
 ```
 
-Replace `DURATION_VALUE` with the DURATION variable. Record:
-- The EXIT_CODE value from output (124=timeout=normal ✅, other non-zero=⚠️)
-- Count lines matching `<D:\d+,AX:-?\d+,AY:-?\d+,AZ:-?\d+>` → valid_frames
+Replace `DURATION_VALUE` with the DURATION value. Parse output:
+- EXIT_CODE: 124=timeout=✅, 0=clean exit=✅, other=⚠️
+- Valid frames: lines matching `<D:\d+,AX:-?\d+,AY:-?\d+,AZ:-?\d+>`
 - fps = valid_frames / DURATION_VALUE
-- Count D:8190 frames (out-of-range) and D:0 frames (not initialized)
-- First 3 and last 3 valid frame lines as samples
+- D:8190 frames (out-of-range), D:0 frames (not initialized)
+- First 3 and last 3 valid frame samples
 
 ---
 
-## 11. EXECUTE: web signal check (skip only if DEBUG=no or NO_BROWSER=yes)
+## 8. Web Signal Check (skip if DEBUG=no or NO_BROWSER=yes)
 
-Call `mcp__claude-in-chrome__read_console_messages` with pattern `"serial|Serial|D:|sensor|Sensor"`.
-Call `mcp__claude-in-chrome__get_page_text` and check if sensor values changed from "--".
-Record: any sensor data visible in Chrome.
+`mcp__claude-in-chrome__read_console_messages` pattern: `"serial|Serial|D:|sensor|Sensor"`
+`mcp__claude-in-chrome__get_page_text` — check if sensor values changed from "--".
 
 ---
 
-## 12. Report
-
-Output this table with actual results filled in:
+## 9. Results Report
 
 ```
 ## /dev Integration Test Results
 
 | Step | Item | Result | Notes |
 |------|------|--------|-------|
-| 1 | check_env | | |
-| 2 | rake build APP=<APP> | | |
-| 3 | rake flash | | |
-| 4 | web server | | |
-| 5 | page load | | |
-| 6 | JS errors | | count: |
-| 7 | ruby.wasm init | | |
-| 8 | UI elements | | |
-| 10 | serial capture | | fps: , err: |
-| 11 | web signal check | | |
+| 1 | web server | | |
+| 2 | page load | | |
+| 3 | JS errors | | count: |
+| 4 | ruby.wasm init | | |
+| 5 | UI elements | | |
+| 7 | serial capture | | fps: , err: |
+| 8 | web signal check | | |
 
 Overall: PASS / PARTIAL / FAIL
-```
 
-Then add:
-```
 ⚠️ Web Serial requires manual connection:
 1. Click "Connect" in Chrome
 2. Select ATOM Matrix USB port

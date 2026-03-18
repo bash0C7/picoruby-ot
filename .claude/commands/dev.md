@@ -5,18 +5,41 @@ description: Integration test command — build, flash, start web server, and ve
 
 # /dev — Integration Test Command
 
-Delegates all work to the **dev-integration subagent** to protect the main context window.
-
 ## Instructions
 
-Parse `$ARGUMENTS` and pass them as-is to the dev-integration subagent via the Agent tool.
+Parse `$ARGUMENTS`:
+- APP = value after `APP=` (default: `otmeiwa`)
+- SKIP_BUILD = `--skip-build` present? yes/no
+- DEBUG = `--debug` present? yes/no
+- DURATION = value after `DURATION=` (default: `60`)
+
+### Step 1: Build + Flash (skip if --skip-build)
+
+If SKIP_BUILD=yes, skip to Step 2.
+
+Delegate to **picoruby-dev subagent**:
 
 ```
-subagent_type: dev-integration
-prompt: $ARGUMENTS
+DEV_COMMAND_CONTEXT=true
+
+Run these two commands in /Users/bash/dev/src/github.com/bash0C7/picoruby-ot:
+1. bundle exec rake build APP=<APP>
+2. If exit code 0: bundle exec rake flash
+
+Report: build exit code, flash exit code (non-zero flash = warning, not fatal).
 ```
 
-Wait for the subagent to complete and return its report to the user.
+If build fails → STOP and report error.
+
+### Step 2: Web + Serial verification
+
+Delegate to **dev-integration subagent** with the original arguments:
+
+```
+<original $ARGUMENTS>
+```
+
+Wait for report and return it to the user.
 
 ## Arguments Reference
 
