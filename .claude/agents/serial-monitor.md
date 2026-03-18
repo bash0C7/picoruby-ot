@@ -7,44 +7,72 @@ model: haiku
 
 # Serial Monitor Capture Agent
 
-Captures `bundle exec rake monitor` output for a fixed duration and returns parsed results.
+Captures serial output from ATOM Matrix (otmeiwa) for a fixed duration using Python pyserial.
+Baud rate: **115200bps fixed**.
 
 ## Task
 
-You will receive a task with `DURATION=N` specified.
+Parse `DURATION=N` from prompt (default: 60).
 
-Run the following command via Bash tool:
+### Step 1: Find serial port
 
 ```bash
-cd /Users/bash/dev/src/github.com/bash0C7/picoruby-ot && timeout <DURATION> bundle exec rake monitor 2>&1
+ls /dev/cu.usbserial-* 2>/dev/null || ls /dev/tty.usbserial-* 2>/dev/null || echo "NO_PORT"
 ```
 
-Replace `<DURATION>` with the value provided.
+If output is `NO_PORT` → report error "device not connected", stop.
 
-## Exit Status Handling
+Use the first port found as PORT.
 
-- Exit status **124** = timeout expired = **normal** (expected)
-- Exit status **0** = monitor exited cleanly = normal
-- Any other non-zero = error (device not connected, build issue, etc.)
+### Step 2: Capture serial output via Python
+
+```bash
+python3 - <<'EOF'
+import serial, time, sys, re
+
+PORT = "REPLACE_WITH_PORT"
+BAUD = 115200
+DURATION = REPLACE_WITH_DURATION
+
+print(f"Capturing {PORT} at {BAUD}bps for {DURATION}s...")
+sys.stdout.flush()
+
+try:
+    s = serial.Serial(PORT, BAUD, timeout=1)
+    start = time.time()
+    while time.time() - start < DURATION:
+        line = s.readline().decode('utf-8', errors='replace').strip()
+        if line:
+            print(line)
+            sys.stdout.flush()
+    s.close()
+    print(f"EXIT_CODE:0")
+except Exception as e:
+    print(f"ERROR: {e}")
+    print(f"EXIT_CODE:1")
+EOF
+```
+
+Replace `REPLACE_WITH_PORT` with the detected PORT and `REPLACE_WITH_DURATION` with the DURATION integer.
 
 ## Output Parsing
 
-After capturing, parse the output:
+Parse the captured output:
 
-1. **Valid frames**: lines matching pattern `<D:\d+,AX:-?\d+,AY:-?\d+,AZ:-?\d+>`
-2. **Error frames D:8190**: valid frames where D value is 8190 (out-of-range)
-3. **Zero frames D:0**: valid frames where D value is 0 (sensor not initialized)
-4. **FPS estimate**: total_valid_frames / DURATION
+1. **Valid frames**: lines matching `<D:\d+,AX:-?\d+,AY:-?\d+,AZ:-?\d+>`
+2. **Error frames D:8190**: D value = 8190 (sensor out of range)
+3. **Zero frames D:0**: D value = 0 (sensor not initialized)
+4. **FPS estimate**: valid_frames / DURATION
 
 ## Return Format
-
-Return a structured report with:
 
 ```
 ## Serial Capture Results
 
+- Port: /dev/cu.usbserial-XXXX
+- Baud: 115200bps
 - Duration: Ns
-- Exit status: N (124=timeout=normal)
+- Exit status: 0/1
 - Total output lines: N
 - Valid frames: N
 - FPS estimate: N.N
@@ -59,13 +87,13 @@ Return a structured report with:
 <D:248,AX:11,AY:-9,AZ:2>
 ...
 
-### Non-frame output (errors/warnings):
-(any lines that don't match the frame pattern — first 10 lines)
+### Non-frame output (first 5 lines):
+...
 ```
 
 ## Constraints
 
-- Do NOT run any other commands
-- Do NOT modify any files
-- Do NOT retry if rake monitor fails with non-124 exit status — report the error as-is
-- Keep raw output excerpt to first/last 5 valid frames only (protect context window)
+- Baud rate is always 115200 — never change it
+- Do NOT run rake monitor (requires TTY)
+- Do NOT retry on error — report as-is
+- Keep output to first/last 5 valid frames only
