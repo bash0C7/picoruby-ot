@@ -26,23 +26,26 @@ cd /Users/bash/dev/src/github.com/bash0C7/picoruby-ot && bundle exec rake check_
 
 If it fails → **STOP** and report error.
 
-## Phase 2 — Build + Flash (unless --skip-build)
+## Phase 2 — Build + Flash
 
-If `--skip-build` is set, skip entirely.
+**MANDATORY** unless the literal string `--skip-build` appears in the arguments.
+Do NOT skip this phase for any other reason (e.g. device not connected, previous run, etc.).
 
-Otherwise run sequentially:
+If `--skip-build` is present → mark as ⏭️ skipped in report, proceed to Phase 3.
+
+Otherwise, run sequentially via Bash:
 
 ```bash
 cd /Users/bash/dev/src/github.com/bash0C7/picoruby-ot && bundle exec rake build APP=<APP>
 ```
 
-If build succeeds:
+If build exit code is 0, then run:
 ```bash
 cd /Users/bash/dev/src/github.com/bash0C7/picoruby-ot && bundle exec rake flash
 ```
 
-- Build FAIL → **STOP**
-- Flash FAIL → warn and continue (device may not be connected)
+- Build non-zero exit → **STOP**, report error
+- Flash non-zero exit → mark as ⚠️ in report, continue to Phase 3 (device may not be connected)
 
 ## Phase 3 — Web Server
 
@@ -84,21 +87,28 @@ Expected: at least 1 match.
 
 `mcp__claude-in-chrome__computer` — capture screenshot.
 
-## Phase 9 — Serial Capture (only with --debug)
+## Phase 9 — Serial Capture
 
-If `--debug` is NOT set, skip entirely.
+If `--debug` is NOT in the arguments → mark as ⏭️ skipped in report, proceed to Phase 10.
 
-Run:
+If `--debug` IS present → **MANDATORY**. Run regardless of device connection status.
+
+Replace `<DURATION>` with the parsed DURATION value (default 60):
+
 ```bash
-cd /Users/bash/dev/src/github.com/bash0C7/picoruby-ot && timeout <DURATION> bundle exec rake monitor 2>&1
+cd /Users/bash/dev/src/github.com/bash0C7/picoruby-ot && timeout <DURATION> bundle exec rake monitor 2>&1; echo "EXIT:$?"
 ```
 
-Exit status 124 = timeout = normal.
+Exit status interpretation (read from `EXIT:N` in output):
+- **124** = timeout expired = normal ✅
+- **0** = monitor exited cleanly = normal ✅
+- **other** = error (device not connected, port busy, etc.) = ⚠️ warn, do NOT stop
 
-Parse output:
-- Valid frames: lines matching `<D:\d+,AX:-?\d+,AY:-?\d+,AZ:-?\d+>`
-- FPS estimate: frames / DURATION
-- Error frames: D:8190 (out-of-range), D:0 (not initialized)
+Parse output for valid frames matching `<D:\d+,AX:-?\d+,AY:-?\d+,AZ:-?\d+>`:
+- Count total valid frames
+- FPS estimate = frames / DURATION
+- Error frames: D value is 8190 (out-of-range) or 0 (not initialized)
+- Report first 3 and last 3 valid frames as samples
 
 | Item | Expected |
 |------|----------|
