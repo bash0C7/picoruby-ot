@@ -6,6 +6,9 @@ require 'webrick'
 require 'pty'
 require 'io/console'
 
+$stdout.sync = true
+$stderr.sync = true
+
 port = (ARGV[0] || 8000).to_i
 root = File.expand_path(ARGV[1] || File.dirname(__FILE__))
 

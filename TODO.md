@@ -2,6 +2,15 @@
 
 ---
 
+## ★★ otmeiwa_emurator 動作確認（最優先）
+
+- [ ] **server.rb $stdout.sync 問題**: バックグラウンド起動時にserver.logが空になる。PTYポートパスがログに出ない
+  - 修正済み (`$stdout.sync = true` 追加) だが未コミット・未検証
+  - `rake server:start` 後に `cat web/server.log` でEmulator/Synthポートパスが出ること確認
+  - Chrome 2タブで実際にシリアル接続してスライダー→音出しまで通しテストする
+
+---
+
 ## ★ web/ (Chrome Synth) ← 最大優先：楽器としての完成度はここ
 
 ### 音程・音楽性
