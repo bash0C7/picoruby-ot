@@ -2,6 +2,7 @@
 
 ## otmeiwa.rb (Sensor Output)
 
+- [ ] **LED saturation**: calibrate直後はmag=0で彩度最小値(100/255)になり白っぽい — `saturation = (mag * 55 / 1500 + 200).clamp(200, 255)` で最小値200に引き上げ
 - [ ] **Calibration on boot**: キャリブレーション未実施時に重力ベクトル(~1000 milliG)がそのまま出力される問題 — 起動時自動キャリブレーション or 起動ガイダンス表示
 - [ ] **Distance noise filtering**: D値が20mmにジャンプする外れ値除去（移動平均 or 中央値フィルタ）
 - [ ] **Frame rate stability**: ~20fps を安定させる（sleep調整）
