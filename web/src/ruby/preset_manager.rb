@@ -6,7 +6,7 @@ class PresetManager
 
   def initialize
     @current = :otamatone
-    @patch   = nil
+    @patch   = build(@current)
   end
 
   def switch(name)
@@ -52,7 +52,7 @@ class PresetManager
       end
     when :retro
       SynthPatch.build(adapter: SynthPatch::WebAdapter.new) do |syn|
-        mod     = syn.fm_op(:square, freq: 220, amp: 0, name: :fm_mod)
+        mod     = syn.fm_op(:square, freq: 220, amp: 80, name: :fm_mod)
         carrier = syn.fm_op(:square, freq: 220, name: :fm_carrier)
         carrier.fm(mod)
         syn.mix(carrier, name: :mixer)
