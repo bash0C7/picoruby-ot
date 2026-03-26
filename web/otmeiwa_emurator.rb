@@ -2,16 +2,32 @@
 # otmeiwa_emurator.rb — ATOM Matrix センサーエミュレーター CLI
 # 使用法: ruby web/otmeiwa_emurator.rb
 
-require 'pty'
-require 'io/console'
+require 'webrick'
 require 'irb'
 
-# 仮想シリアルポート作成
-$pty_master, pty_slave = PTY.open
-pty_slave.raw!
+$current_frame = "<D:450,AX:0,AY:0,AZ:0>"
+
+# フレーム配信 HTTP サーバー (port 9999)
+Thread.new do
+  srv = WEBrick::HTTPServer.new(
+    Port: 9999,
+    Logger: WEBrick::Log.new(IO::NULL),
+    AccessLog: []
+  )
+  srv.mount_proc('/frame') do |_req, res|
+    res['Content-Type'] = 'text/plain'
+    res['Access-Control-Allow-Origin'] = '*'
+    res.body = $current_frame
+  end
+  trap('INT') { srv.shutdown }
+  srv.start
+end
+
+sleep 0.3  # サーバー起動待ち
 
 puts "=" * 50
-puts "Connect Chrome to: #{pty_slave.path}"
+puts "Emulator ready: http://localhost:9999/frame"
+puts "index.html を開くと自動接続します"
 puts "=" * 50
 puts ""
 puts "Methods:"
@@ -22,9 +38,7 @@ puts ""
 
 # 1フレーム送信
 def emit(d: 450, ax: 0, ay: 0, az: 0)
-  frame = "<D:#{d},AX:#{ax},AY:#{ay},AZ:#{az}>\n"
-  $pty_master.write(frame)
-  frame.strip
+  $current_frame = "<D:#{d},AX:#{ax},AY:#{ay},AZ:#{az}>"
 end
 
 # 送り続ける (Ctrl+C で停止)
@@ -46,8 +60,8 @@ def sweep(param, from, to, step: 20, interval: 0.05, **rest)
   trap('INT') { throw :stop }
   catch(:stop) do
     loop do
-      from.step(to, step)    { |v| emit(**rest.merge(param => v)); sleep interval }
-      to.step(from, -step)   { |v| emit(**rest.merge(param => v)); sleep interval }
+      from.step(to, step)  { |v| emit(**rest.merge(param => v)); sleep interval }
+      to.step(from, -step) { |v| emit(**rest.merge(param => v)); sleep interval }
     end
   end
   trap('INT', 'DEFAULT')
