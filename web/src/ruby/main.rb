@@ -21,8 +21,9 @@ class SynthApp
   end
 
   def on_connect(baud)
-    @serial.on_connect(baud.to_i)
-    JS.global.updateSerialStatus("connected at #{baud}bps", @serial.parse_error_count)
+    baud_i = baud.to_i
+    @serial.on_connect(baud_i)
+    JS.global.updateSerialStatus("connected at #{baud_i}bps", @serial.parse_error_count)
   end
 
   def on_disconnect
