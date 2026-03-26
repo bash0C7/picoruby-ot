@@ -24,12 +24,12 @@ Build and flash are handled by the caller — do NOT run rake build or rake flas
 ## 1. Web Server
 
 ```bash
-cd /Users/bash/dev/src/github.com/bash0C7/picoruby-ot && bundle exec rake server:status
+cd /Users/bash/dev/src/github.com/bash0C7/picoruby-ot && rake server:status
 ```
 
 If not running:
 ```bash
-cd /Users/bash/dev/src/github.com/bash0C7/picoruby-ot && bundle exec rake server:start
+cd /Users/bash/dev/src/github.com/bash0C7/picoruby-ot && rake server:start
 ```
 
 If start fails → STOP, report error.
@@ -76,7 +76,7 @@ Expected: ≥1 match.
 This step is authorized to run `rake monitor`. Execute it.
 
 ```bash
-cd /Users/bash/dev/src/github.com/bash0C7/picoruby-ot && timeout DURATION_VALUE bundle exec rake monitor 2>&1; echo "EXIT_CODE:$?"
+cd /Users/bash/dev/src/github.com/bash0C7/picoruby-ot && timeout DURATION_VALUE rake monitor 2>&1; echo "EXIT_CODE:$?"
 ```
 
 Replace `DURATION_VALUE` with the DURATION value. Parse output:

@@ -22,8 +22,8 @@ If SKIP_BUILD=yes, skip to Step 2.
 
 Use **Bash tool** directly in `/Users/bash/dev/src/github.com/bash0C7/picoruby-ot`:
 
-1. Run `bundle exec rake build APP=<APP>` — capture exit code
-2. If exit code 0: run `bundle exec rake flash` — capture exit code (non-zero = warning, not fatal)
+1. Run `rake build APP=<APP>` — capture exit code
+2. If exit code 0: run `rake flash` — capture exit code (non-zero = warning, not fatal)
 
 If build fails (non-zero) → STOP and report error.
 
