@@ -105,7 +105,8 @@ end
 | I2C SDA        | 25   | otpwm/otmeiwa | J3 port             |
 | I2C SCL        | 21   | otpwm/otmeiwa | J3 port             |
 | PWM Speaker    | 33   | otpwm      | J4 port                |
-| WS2812 LED     | 26   | otpwm/otmeiwa | Grove port          |
+| WS2812 LED     | 32   | otmeiwa       | Grove port (WS2812) |
+| WS2812 LED     | 26   | otpwm         | Grove port          |
 | WS2812 LED     | 22   | otma       | PortD/J5               |
 | MIDI TX        | 22   | otma       | UART1, PortD/J5        |
 | MIDI RX        | 19   | otma       | UART1, PortD/J5        |

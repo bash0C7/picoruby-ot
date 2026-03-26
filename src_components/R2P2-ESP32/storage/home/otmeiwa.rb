@@ -6,8 +6,8 @@ require 'mpu6886'
 require 'vl53l0x'
 
 class SensorLEDVisualizer
-  LED_PIN = 26
-  LED_COUNT = 15
+  LED_PIN   = 32
+  LED_COUNT = 16
   DIST_MIN = 20
   DIST_MAX = 900
 
