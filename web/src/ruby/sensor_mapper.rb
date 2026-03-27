@@ -1,4 +1,3 @@
-# web/src/ruby/sensor_mapper.rb
 class SensorMapper
   DIST_MIN_DEFAULT = 20
   DIST_MAX_DEFAULT = 900
@@ -43,32 +42,24 @@ class SensorMapper
     build_scale_notes
   end
 
-  # Distance → MIDI note (linear scale, scale-snapped)
   def distance_to_note(dist_mm)
-    clamped = dist_mm < @dist_min ? @dist_min : (dist_mm > @dist_max ? @dist_max : dist_mm)
+    clamped = dist_mm.clamp(@dist_min, @dist_max)
     ratio   = (clamped - @dist_min).to_f / (@dist_max - @dist_min)
-    span    = @midi_max - @midi_min
-    raw     = @midi_min + (ratio * span).to_i
+    raw     = @midi_min + (ratio * (@midi_max - @midi_min)).to_i
     snap_to_scale(raw)
   end
 
-  # MIDI note → Hz (equal temperament, A4=440Hz)
+  # equal temperament: MIDI 69 = A4 = 440Hz, semitone = 2^(1/12)
   def note_to_freq(midi_note)
     (440.0 * (2.0 ** ((midi_note - 69).to_f / 12.0))).to_i
   end
 
-  # MIDI note → display string e.g. "A4"
   def note_name(midi_note)
-    name   = NOTE_NAMES[midi_note % 12]
-    octave = midi_note / 12 - 1
-    "#{name}#{octave}"
+    "#{NOTE_NAMES[midi_note % 12]}#{midi_note / 12 - 1}"
   end
 
-  # Accel magnitude → FM depth 0.0-1.0
   def accel_to_fm_depth(ax, ay, az)
-    mag   = ax.abs + ay.abs + az.abs
-    depth = mag.to_f / @accel_scale
-    depth > 1.0 ? 1.0 : depth
+    ((ax.abs + ay.abs + az.abs).to_f / @accel_scale).clamp(0.0, 1.0)
   end
 
   def in_range?(dist_mm)
@@ -79,23 +70,11 @@ class SensorMapper
 
   def build_scale_notes
     pattern = SCALES[@scale] || SCALES[:pentatonic]
-    @scale_notes = []
-    (@midi_min..@midi_max).each do |n|
-      @scale_notes << n if pattern.include?(n % 12)
-    end
+    @scale_notes = (@midi_min..@midi_max).select { |n| pattern.include?(n % 12) }
     @scale_notes << @midi_min if @scale_notes.empty?
   end
 
   def snap_to_scale(midi_note)
-    best      = @scale_notes[0]
-    best_dist = (midi_note - best).abs
-    @scale_notes.each do |n|
-      d = (midi_note - n).abs
-      if d < best_dist
-        best_dist = d
-        best = n
-      end
-    end
-    best
+    @scale_notes.min_by { |n| (midi_note - n).abs }
   end
 end

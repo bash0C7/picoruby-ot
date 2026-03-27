@@ -1,4 +1,3 @@
-# web/src/ruby/main.rb
 require 'js'
 
 $serial   = Serial.new
@@ -34,7 +33,7 @@ class SynthApp
 
   def on_receive(data)
     frames = @serial.receive(data.to_s)
-    return unless frames && !frames.empty?
+    return if frames.empty?
     frames.each do |frame|
       next unless frame
       dist     = frame[:distance]
@@ -48,60 +47,37 @@ class SynthApp
       active   = @mapper.in_range?(dist)
       JS.global.updateSensorParams(freq, fm_depth, active ? 1 : 0)
       JS.global.updateSensorDisplay(dist, ax, ay, az, freq, fm_depth, note_str)
-      last = @serial.rx_log.last
-      JS.global.updateSerialMonitor(last.to_s) if last
     end
+    JS.global.updateSerialMonitor(@serial.rx_log.last.to_s)
   end
 
   def on_param(key, value)
     case key
-    when 'preset'
-      @presets.switch(value.to_s)
-    when 'scale'
-      @mapper.set_scale(value.to_s)
-    when 'glide_time'
-      JS.global[:synthGlideTime] = value.to_f / 1000.0
-    when 'fm_depth_manual'
-      JS.global[:synthFmDepthManual] = value.to_f
-    when 'mod_ratio'
-      JS.global[:synthModRatio] = value.to_f
-    when 'carrier_wave'
-      @presets.patch[:fm_carrier]&.set_param(:waveform, value.to_s) if @presets.patch
-    when 'mod_wave'
-      @presets.patch[:fm_mod]&.set_param(:waveform, value.to_s) if @presets.patch
-    when 'dist_min'
-      @mapper.set_dist_range(value.to_i, @mapper.dist_max)
-    when 'dist_max'
-      @mapper.set_dist_range(@mapper.dist_min, value.to_i)
-    when 'midi_min'
-      @mapper.set_midi_range(value.to_i, @mapper.midi_max)
-    when 'midi_max'
-      @mapper.set_midi_range(@mapper.midi_min, value.to_i)
-    when 'accel_scale'
-      @mapper.accel_scale = value.to_f
-    when 'filter_cutoff'
-      @presets.patch[:filter]&.set_param(:cutoff, value.to_f) if @presets.patch
-    when 'filter_q'
-      @presets.patch[:filter]&.set_param(:q, value.to_f) if @presets.patch
-    when 'master_gain'
-      JS.global[:synthMasterGain] = value.to_f
-    when 'attack'
-      @presets.patch&.set_attack(value.to_f / 1000.0)
-    when 'decay'
-      @presets.patch&.set_decay(value.to_f / 1000.0)
-    when 'sustain'
-      @presets.patch&.set_sustain(value.to_f)
-    when 'release'
-      @presets.patch&.set_release(value.to_f / 1000.0)
+    when 'preset'       then @presets.switch(value.to_s)
+    when 'scale'        then @mapper.set_scale(value.to_s)
+    when 'glide_time'   then JS.global[:synthGlideTime] = value.to_f / 1000.0
+    when 'fm_depth_manual' then JS.global[:synthFmDepthManual] = value.to_f
+    when 'mod_ratio'    then JS.global[:synthModRatio] = value.to_f
+    when 'carrier_wave' then @presets.patch[:fm_carrier]&.set_param(:waveform, value.to_s)
+    when 'mod_wave'     then @presets.patch[:fm_mod]&.set_param(:waveform, value.to_s)
+    when 'dist_min'     then @mapper.set_dist_range(value.to_i, @mapper.dist_max)
+    when 'dist_max'     then @mapper.set_dist_range(@mapper.dist_min, value.to_i)
+    when 'midi_min'     then @mapper.set_midi_range(value.to_i, @mapper.midi_max)
+    when 'midi_max'     then @mapper.set_midi_range(@mapper.midi_min, value.to_i)
+    when 'accel_scale'  then @mapper.accel_scale = value.to_f
+    when 'filter_cutoff' then @presets.patch[:filter]&.set_param(:cutoff, value.to_f)
+    when 'filter_q'     then @presets.patch[:filter]&.set_param(:q, value.to_f)
+    when 'master_gain'  then JS.global[:synthMasterGain] = value.to_f
+    when 'attack'       then @presets.patch&.set_attack(value.to_f / 1000.0)
+    when 'decay'        then @presets.patch&.set_decay(value.to_f / 1000.0)
+    when 'sustain'      then @presets.patch&.set_sustain(value.to_f)
+    when 'release'      then @presets.patch&.set_release(value.to_f / 1000.0)
     end
   end
 end
 
-begin
-  JS.global[:console].log("[Ruby] starting picoruby-ot synth...")
-  app = SynthApp.new($serial, $mapper, $presets)
-  app.register_callbacks
-  JS.global[:console].log("[Ruby] picoruby-ot synth ready!")
-rescue => e
-  JS.global[:console].error("[Ruby] Fatal: #{e.message}")
-end
+# 初期化失敗はプログラムエラーなので握りつぶさずそのまま上げる
+JS.global[:console].log("[Ruby] starting picoruby-ot synth...")
+app = SynthApp.new($serial, $mapper, $presets)
+app.register_callbacks
+JS.global[:console].log("[Ruby] picoruby-ot synth ready!")

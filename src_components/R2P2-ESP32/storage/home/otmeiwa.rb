@@ -5,11 +5,14 @@ require 'i2c'
 require 'mpu6886'
 require 'vl53l0x'
 
+DIST_MIN = 20
+DIST_MAX = 900
+I2C_SDA  = 25
+I2C_SCL  = 21
+
 class SensorLEDVisualizer
   LED_PIN   = 32
   LED_COUNT = 16
-  DIST_MIN = 20
-  DIST_MAX = 900
 
   def initialize(led_strip)
     @led_strip = led_strip
@@ -18,22 +21,17 @@ class SensorLEDVisualizer
 
   def update(distance, ax, ay, az, sound_on)
     if sound_on
-      # 色相: 距離 20-900mm → 0-383
-      hue = ((distance - DIST_MIN) * 384 / (DIST_MAX - DIST_MIN)).clamp(0, 383)
-      # 彩度: 加速度マンハッタン距離 → 100-255
-      mag = ax.abs + ay.abs + az.abs
-      saturation = (mag * 155 / 1500 + 100).clamp(100, 255)
+      hue        = ((distance - DIST_MIN) * 384 / (DIST_MAX - DIST_MIN)).clamp(0, 383)
+      saturation = ((ax.abs + ay.abs + az.abs) * 155 / 1500 + 100).clamp(100, 255)
       brightness = 150
     else
-      # ミュート時: 暗いグレー
-      hue = 0
+      hue        = 0
       saturation = 0
       brightness = 20
     end
 
     LED_COUNT.times do |i|
-      sb = (saturation << 8) | brightness
-      @led_colors[i] = (hue << 16) | sb
+      @led_colors[i] = (hue << 16) | (saturation << 8) | brightness
     end
   end
 
@@ -47,19 +45,15 @@ class SensorLEDVisualizer
 end
 
 class SensorInstrument
-  I2C_SDA_PIN = 25
-  I2C_SCL_PIN = 21
-  DIST_VALID_MIN = 20
-  DIST_VALID_MAX = 900
   DISTANCE_SMOOTH_ALPHA = 50
 
   attr_reader :distance, :ax, :ay, :az, :sound_on
 
   def initialize(tof_sensor, accel_sensor)
-    @tof_sensor = tof_sensor
+    @tof_sensor   = tof_sensor
     @accel_sensor = accel_sensor
-    @distance = DIST_VALID_MIN
-    @prev_distance = DIST_VALID_MIN
+    @distance     = DIST_MIN
+    @prev_distance = DIST_MIN
     @ax = 0
     @ay = 0
     @az = 0
@@ -71,8 +65,8 @@ class SensorInstrument
 
   def toggle_sound
     @sound_on = !@sound_on
+    # ボタン押下時の姿勢を基準とすることで、演奏中の傾きのみ検出
     if @sound_on
-      # キャリブレーション: 現在の加速度をベースラインとして記録
       raw = @accel_sensor.acceleration
       @accel_baseline_x = raw[:x]
       @accel_baseline_y = raw[:y]
@@ -81,16 +75,15 @@ class SensorInstrument
   end
 
   def update
-    # 距離計測
     raw_distance = @tof_sensor.read_distance
-    if raw_distance >= DIST_VALID_MIN && raw_distance <= DIST_VALID_MAX
-      # EMAで平滑化
+    if raw_distance >= DIST_MIN && raw_distance <= DIST_MAX
+      # EMAで平滑化。センサーノイズを抑えつつ追従速度を確保
       delta = raw_distance - @prev_distance
       @distance = (@prev_distance + delta * DISTANCE_SMOOTH_ALPHA / 100).to_i
       @prev_distance = @distance
     end
 
-    # 加速度計測 (baseline差分、milliG整数変換)
+    # milliG整数化。浮動小数点を避けてPicoRubyメモリを節約
     raw = @accel_sensor.acceleration
     @ax = ((raw[:x] - @accel_baseline_x) * 1000).to_i
     @ay = ((raw[:y] - @accel_baseline_y) * 1000).to_i
@@ -102,10 +95,10 @@ class SensorInstrument
   end
 end
 
-button = GPIO.new(39, GPIO::IN|GPIO::PULL_UP)
+button    = GPIO.new(39, GPIO::IN|GPIO::PULL_UP)
 led_strip = WS2812.new(RMTDriver.new(SensorLEDVisualizer::LED_PIN))
 
-i2c_bus = I2C.new(unit: :ESP32_I2C0, frequency: 100_000, sda_pin: SensorInstrument::I2C_SDA_PIN, scl_pin: SensorInstrument::I2C_SCL_PIN)
+i2c_bus = I2C.new(unit: :ESP32_I2C0, frequency: 100_000, sda_pin: I2C_SDA, scl_pin: I2C_SCL)
 sleep_ms(100)
 
 accel_sensor = MPU6886.new(i2c_bus)
@@ -117,7 +110,7 @@ tof_sensor = VL53L0X.new(i2c_bus)
 sleep_ms(100)
 
 instrument = SensorInstrument.new(tof_sensor, accel_sensor)
-led_viz = SensorLEDVisualizer.new(led_strip)
+led_viz    = SensorLEDVisualizer.new(led_strip)
 
 irq = button.irq(GPIO::EDGE_FALL, debounce: 100, capture: {inst: instrument, viz: led_viz}) do |btn, ev, cap|
   cap[:inst].toggle_sound

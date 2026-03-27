@@ -19,9 +19,10 @@ class PresetManager
   private
 
   def build(name)
+    adapter = SynthPatch::WebAdapter.new
     case name
     when :otamatone
-      SynthPatch.build(adapter: SynthPatch::WebAdapter.new) do |syn|
+      SynthPatch.build(adapter: adapter) do |syn|
         mod     = syn.fm_op(:triangle, freq: 220, amp: 150, name: :fm_mod)
         carrier = syn.fm_op(:triangle, freq: 220, name: :fm_carrier)
         carrier.fm(mod)
@@ -31,7 +32,7 @@ class PresetManager
            .out
       end
     when :clean
-      SynthPatch.build(adapter: SynthPatch::WebAdapter.new) do |syn|
+      SynthPatch.build(adapter: adapter) do |syn|
         mod     = syn.fm_op(:sine, freq: 220, amp: 0, name: :fm_mod)
         carrier = syn.fm_op(:sine, freq: 220, name: :fm_carrier)
         carrier.fm(mod)
@@ -41,7 +42,7 @@ class PresetManager
            .out
       end
     when :acid
-      SynthPatch.build(adapter: SynthPatch::WebAdapter.new) do |syn|
+      SynthPatch.build(adapter: adapter) do |syn|
         mod     = syn.fm_op(:sine, freq: 220, amp: 300, name: :fm_mod)
         carrier = syn.fm_op(:sawtooth, freq: 220, name: :fm_carrier)
         carrier.fm(mod)
@@ -51,7 +52,7 @@ class PresetManager
            .out
       end
     when :retro
-      SynthPatch.build(adapter: SynthPatch::WebAdapter.new) do |syn|
+      SynthPatch.build(adapter: adapter) do |syn|
         mod     = syn.fm_op(:square, freq: 220, amp: 80, name: :fm_mod)
         carrier = syn.fm_op(:square, freq: 220, name: :fm_carrier)
         carrier.fm(mod)
