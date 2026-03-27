@@ -1,0 +1,1202 @@
+# Web Synth Redesign Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Redesign the Chrome web synth into a cockpit-style Otamatone instrument with scale-snap glide, FM preset exploration, and simplified Ruby internals.
+
+**Architecture:** 4 flat Ruby files (serial.rb, sensor_mapper.rb, preset_manager.rb, main.rb) + unchanged synth_patch/ DSL. JS is glue-only. UI is a 2-column always-visible cockpit with 150% zoom.
+
+**Tech Stack:** ruby.wasm 4.0 (@ruby/4.0-wasm-wasi 2.8.1), Web Audio API, Web Serial API, Canvas 2D, Chrome-only.
+
+**File conflicts:** This plan touches only `web/index.html` and `web/src/ruby/` (excluding `emulator/`). Does NOT touch `web/server.rb` or `web/otmeiwa_emurator.html` (owned by emulator spec).
+
+---
+
+## File Map
+
+| Action | Path |
+|--------|------|
+| Create | `web/src/ruby/serial.rb` |
+| Rewrite | `web/src/ruby/sensor_mapper.rb` |
+| Create | `web/src/ruby/preset_manager.rb` |
+| Rewrite | `web/src/ruby/main.rb` |
+| Rewrite | `web/index.html` |
+| Delete | `web/src/ruby/serial_protocol.rb` |
+| Delete | `web/src/ruby/serial_manager.rb` |
+| Delete | `web/src/ruby/js_bridge.rb` |
+
+`web/src/ruby/synth_patch/` — **untouched**.
+
+---
+
+## Task 1: Create serial.rb
+
+Merges `serial_protocol.rb` + `serial_manager.rb` into one flat class. Adds `parse_error_count` for UI display.
+
+**Files:**
+- Create: `web/src/ruby/serial.rb`
+
+- [ ] **Step 1: Write serial.rb**
+
+```ruby
+# web/src/ruby/serial.rb
+class Serial
+  MAX_BUFFER = 4096
+  LOG_MAX    = 50
+
+  attr_reader :baud_rate, :rx_log, :parse_error_count
+
+  def initialize
+    @connected         = false
+    @baud_rate         = 115200
+    @rx_buffer         = ''
+    @rx_log            = []
+    @parse_error_count = 0
+  end
+
+  def connected?
+    @connected
+  end
+
+  def on_connect(baud)
+    @baud_rate = baud.to_i
+    @connected = true
+    @rx_buffer = ''
+    JS.global[:console].log("[Serial] connected at #{@baud_rate}bps")
+  end
+
+  def on_disconnect
+    @connected = false
+    @rx_buffer = ''
+    JS.global[:console].log("[Serial] disconnected")
+  end
+
+  def receive(data)
+    return [] unless data.is_a?(String) && !data.empty?
+    @rx_buffer += data
+    frames = []
+    while (s = @rx_buffer.index('<'))
+      e = @rx_buffer.index('>', s)
+      break unless e
+      raw = @rx_buffer[s..e]
+      frame = decode(raw)
+      if frame
+        frames << frame
+      else
+        @parse_error_count += 1
+      end
+      @rx_buffer = e + 1 < @rx_buffer.length ? @rx_buffer[(e + 1)..] : ''
+    end
+    keep = @rx_buffer.index('<')
+    @rx_buffer = keep ? @rx_buffer[keep..] : ''
+    @rx_buffer = @rx_buffer[-MAX_BUFFER..] if @rx_buffer.length > MAX_BUFFER
+    last = data.split("\n").last
+    if last && !last.strip.empty?
+      @rx_log << last.strip
+      @rx_log.shift while @rx_log.length > LOG_MAX
+    end
+    frames
+  end
+
+  private
+
+  def decode(raw)
+    body = raw[1..-2]
+    return nil unless body
+    pairs = body.split(',')
+    return nil unless pairs.length == 4
+    h = {}
+    pairs.each do |pair|
+      kv = pair.split(':')
+      return nil unless kv.length == 2
+      k = kv[0]
+      v = kv[1]
+      return nil unless v && v.match?(/\A-?\d+\z/)
+      h[k] = v.to_i
+    end
+    return nil unless h['D'] && h['AX'] && h['AY'] && h['AZ']
+    { distance: h['D'], ax: h['AX'], ay: h['AY'], az: h['AZ'] }
+  end
+end
+```
+
+- [ ] **Step 2: Verify decode logic**
+
+Read through `decode`: raw input `<D:450,AX:10,AY:-5,AZ:980>` → body = `D:450,AX:10,AY:-5,AZ:980` → 4 pairs → h = {'D'=>450,'AX'=>10,'AY'=>-5,'AZ'=>980} → returns hash. Input `<D:bad>` → body has 1 pair, returns nil. Input `<D:20,AX:abc,AY:0,AZ:0>` → `abc` fails `/\A-?\d+\z/`, returns nil, increments parse_error_count. Confirm logic is correct.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add web/src/ruby/serial.rb
+git commit -m "feat: add serial.rb merging serial_protocol + serial_manager with parse_error_count"
+```
+
+---
+
+## Task 2: Rewrite sensor_mapper.rb
+
+Replaces frequency-based mapping with MIDI note mapping + scale snap. Keeps accel_to_fm_depth and in_range? interfaces unchanged.
+
+**Files:**
+- Rewrite: `web/src/ruby/sensor_mapper.rb`
+
+- [ ] **Step 1: Write sensor_mapper.rb**
+
+```ruby
+# web/src/ruby/sensor_mapper.rb
+class SensorMapper
+  DIST_MIN_DEFAULT = 20
+  DIST_MAX_DEFAULT = 900
+  MIDI_MIN_DEFAULT = 36
+  MIDI_MAX_DEFAULT = 84
+
+  NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']
+  SCALES = {
+    chromatic:  [0,1,2,3,4,5,6,7,8,9,10,11],
+    major:      [0,2,4,5,7,9,11],
+    minor:      [0,2,3,5,7,8,10],
+    pentatonic: [0,2,4,7,9]
+  }
+
+  attr_accessor :accel_scale
+  attr_reader :dist_min, :dist_max, :midi_min, :midi_max
+
+  def initialize
+    @accel_scale = 500.0
+    @dist_min    = DIST_MIN_DEFAULT
+    @dist_max    = DIST_MAX_DEFAULT
+    @midi_min    = MIDI_MIN_DEFAULT
+    @midi_max    = MIDI_MAX_DEFAULT
+    @scale       = :pentatonic
+    build_scale_notes
+  end
+
+  def set_dist_range(min, max)
+    @dist_min = min.to_i
+    @dist_max = max.to_i
+  end
+
+  def set_midi_range(min, max)
+    @midi_min = min.to_i
+    @midi_max = max.to_i
+    build_scale_notes
+  end
+
+  def set_scale(name)
+    key = name.to_sym
+    @scale = SCALES.key?(key) ? key : :pentatonic
+    build_scale_notes
+  end
+
+  # Distance → MIDI note (log scale, scale-snapped)
+  def distance_to_note(dist_mm)
+    clamped = dist_mm < @dist_min ? @dist_min : (dist_mm > @dist_max ? @dist_max : dist_mm)
+    ratio   = (clamped - @dist_min).to_f / (@dist_max - @dist_min)
+    span    = @midi_max - @midi_min
+    raw     = @midi_min + (ratio * span).to_i
+    snap_to_scale(raw)
+  end
+
+  # MIDI note → Hz (equal temperament, A4=440Hz)
+  def note_to_freq(midi_note)
+    (440.0 * (2.0 ** ((midi_note - 69).to_f / 12.0))).to_i
+  end
+
+  # MIDI note → display string e.g. "A4"
+  def note_name(midi_note)
+    name   = NOTE_NAMES[midi_note % 12]
+    octave = midi_note / 12 - 1
+    "#{name}#{octave}"
+  end
+
+  # Accel magnitude → FM depth 0.0-1.0
+  def accel_to_fm_depth(ax, ay, az)
+    mag   = ax.abs + ay.abs + az.abs
+    depth = mag.to_f / @accel_scale
+    depth > 1.0 ? 1.0 : depth
+  end
+
+  def in_range?(dist_mm)
+    dist_mm >= @dist_min && dist_mm <= @dist_max
+  end
+
+  private
+
+  def build_scale_notes
+    pattern = SCALES[@scale] || SCALES[:pentatonic]
+    @scale_notes = []
+    (@midi_min..@midi_max).each do |n|
+      @scale_notes << n if pattern.include?(n % 12)
+    end
+    @scale_notes << @midi_min if @scale_notes.empty?
+  end
+
+  def snap_to_scale(midi_note)
+    best      = @scale_notes[0]
+    best_dist = (midi_note - best).abs
+    @scale_notes.each do |n|
+      d = (midi_note - n).abs
+      if d < best_dist
+        best_dist = d
+        best = n
+      end
+    end
+    best
+  end
+end
+```
+
+- [ ] **Step 2: Verify note mapping**
+
+Trace: dist=450, dist_min=20, dist_max=900 → ratio=(430/880)=0.489 → raw=36+(0.489*48)=36+23=59. MIDI 59 = B3. Pentatonic in C: 0,2,4,7,9. 59%12=11 (B). Nearest pentatonic PC: distance from 11 to [0,2,4,7,9] = [11,9,7,4,2] → min=2 at PC=9 (A). Snap to A, so note=57 (A3). `note_to_freq(57)` = 440*2^((57-69)/12) = 440*2^(-1) = 220Hz. `note_name(57)` = NOTE_NAMES[57%12]=NOTE_NAMES[9]='A', octave=57/12-1=3 → "A3". Confirm correct.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add web/src/ruby/sensor_mapper.rb
+git commit -m "feat: rewrite sensor_mapper with MIDI note mapping and scale snap"
+```
+
+---
+
+## Task 3: Create preset_manager.rb
+
+4 presets defined with the existing SynthPatch DSL. Returns patch object for parameter updates.
+
+**Files:**
+- Create: `web/src/ruby/preset_manager.rb`
+
+- [ ] **Step 1: Write preset_manager.rb**
+
+```ruby
+# web/src/ruby/preset_manager.rb
+class PresetManager
+  PRESETS = [:otamatone, :clean, :acid, :retro]
+
+  attr_reader :current, :patch
+
+  def initialize
+    @current = :otamatone
+    @patch   = nil
+  end
+
+  def switch(name)
+    key = name.to_s.to_sym
+    return unless PRESETS.include?(key)
+    @current = key
+    @patch   = build(key)
+  end
+
+  private
+
+  def build(name)
+    case name
+    when :otamatone
+      SynthPatch.build(adapter: SynthPatch::WebAdapter.new) do |syn|
+        mod     = syn.fm_op(:triangle, freq: 220, amp: 150, name: :fm_mod)
+        carrier = syn.fm_op(:triangle, freq: 220, name: :fm_carrier)
+        carrier.fm(mod)
+        syn.mix(carrier, name: :mixer)
+           .filter(:lowpass, cutoff: 1200, q: 1.5, name: :filter)
+           .gain(0.4, name: :master)
+           .out
+      end
+    when :clean
+      SynthPatch.build(adapter: SynthPatch::WebAdapter.new) do |syn|
+        mod     = syn.fm_op(:sine, freq: 220, amp: 0, name: :fm_mod)
+        carrier = syn.fm_op(:sine, freq: 220, name: :fm_carrier)
+        carrier.fm(mod)
+        syn.mix(carrier, name: :mixer)
+           .filter(:lowpass, cutoff: 4000, q: 0.7, name: :filter)
+           .gain(0.4, name: :master)
+           .out
+      end
+    when :acid
+      SynthPatch.build(adapter: SynthPatch::WebAdapter.new) do |syn|
+        mod     = syn.fm_op(:sine, freq: 220, amp: 300, name: :fm_mod)
+        carrier = syn.fm_op(:sawtooth, freq: 220, name: :fm_carrier)
+        carrier.fm(mod)
+        syn.mix(carrier, name: :mixer)
+           .filter(:lowpass, cutoff: 600, q: 8.0, name: :filter)
+           .gain(0.4, name: :master)
+           .out
+      end
+    when :retro
+      SynthPatch.build(adapter: SynthPatch::WebAdapter.new) do |syn|
+        mod     = syn.fm_op(:square, freq: 220, amp: 0, name: :fm_mod)
+        carrier = syn.fm_op(:square, freq: 220, name: :fm_carrier)
+        carrier.fm(mod)
+        syn.mix(carrier, name: :mixer)
+           .filter(:lowpass, cutoff: 2000, q: 1.0, name: :filter)
+           .gain(0.4, name: :master)
+           .out
+      end
+    end
+  end
+end
+```
+
+- [ ] **Step 2: Verify DSL calls match existing synth_patch/ interface**
+
+Check that `SynthPatch.build(adapter: SynthPatch::WebAdapter.new)`, `syn.fm_op(:triangle, freq:, amp:, name:)`, `.fm(mod)`, `.mix()`, `.filter()`, `.gain()`, `.out` all match the patterns used in the original `main.rb`. They do — this is a copy-and-extend of the original patch definition.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add web/src/ruby/preset_manager.rb
+git commit -m "feat: add preset_manager with 4 DSL-defined FM presets (otamatone/clean/acid/retro)"
+```
+
+---
+
+## Task 4: Rewrite main.rb
+
+Flat SynthApp orchestrator. Uses Serial, SensorMapper, PresetManager. Inline JS calls (no JSBridge). New param keys: preset, scale, glide_time, fm_depth_manual, mod_ratio, carrier_wave, mod_wave.
+
+**Files:**
+- Rewrite: `web/src/ruby/main.rb`
+
+- [ ] **Step 1: Write main.rb**
+
+```ruby
+# web/src/ruby/main.rb
+require 'js'
+
+$serial   = Serial.new
+$mapper   = SensorMapper.new
+$presets  = PresetManager.new
+
+class SynthApp
+  def initialize(serial, mapper, presets)
+    @serial  = serial
+    @mapper  = mapper
+    @presets = presets
+  end
+
+  def register_callbacks
+    app = self
+    JS.global[:rubySerialOnConnect]    = lambda { |baud| app.on_connect(baud) }
+    JS.global[:rubySerialOnDisconnect] = lambda { app.on_disconnect }
+    JS.global[:rubySerialOnReceive]    = lambda { |data| app.on_receive(data) }
+    JS.global[:rubyOnParamUpdate]      = lambda { |key, value| app.on_param(key.to_s, value) }
+  end
+
+  def on_connect(baud)
+    @serial.on_connect(baud.to_i)
+    JS.global.updateSerialStatus("connected at #{baud}bps", @serial.parse_error_count)
+  end
+
+  def on_disconnect
+    @serial.on_disconnect
+    JS.global.updateSensorParams(220, 0.0, 0)
+    JS.global.updateSerialStatus("disconnected", @serial.parse_error_count)
+  end
+
+  def on_receive(data)
+    frames = @serial.receive(data.to_s)
+    return unless frames && !frames.empty?
+    frames.each do |frame|
+      next unless frame
+      dist     = frame[:distance]
+      ax       = frame[:ax]
+      ay       = frame[:ay]
+      az       = frame[:az]
+      note     = @mapper.distance_to_note(dist)
+      freq     = @mapper.note_to_freq(note)
+      note_str = @mapper.note_name(note)
+      fm_depth = @mapper.accel_to_fm_depth(ax, ay, az)
+      active   = @mapper.in_range?(dist)
+      JS.global.updateSensorParams(freq, fm_depth, active ? 1 : 0)
+      JS.global.updateSensorDisplay(dist, ax, ay, az, freq, fm_depth, note_str)
+      last = @serial.rx_log.last
+      JS.global.updateSerialMonitor(last.to_s) if last
+    end
+  end
+
+  def on_param(key, value)
+    case key
+    when 'preset'
+      @presets.switch(value.to_s)
+    when 'scale'
+      @mapper.set_scale(value.to_s)
+    when 'glide_time'
+      JS.global[:synthGlideTime] = value.to_f / 1000.0
+    when 'fm_depth_manual'
+      JS.global[:synthFmDepthManual] = value.to_f
+    when 'mod_ratio'
+      JS.global[:synthModRatio] = value.to_f
+    when 'carrier_wave'
+      @presets.patch[:fm_carrier]&.set_param(:waveform, value.to_s) if @presets.patch
+    when 'mod_wave'
+      @presets.patch[:fm_mod]&.set_param(:waveform, value.to_s) if @presets.patch
+    when 'dist_min'
+      @mapper.set_dist_range(value.to_i, @mapper.dist_max)
+    when 'dist_max'
+      @mapper.set_dist_range(@mapper.dist_min, value.to_i)
+    when 'midi_min'
+      @mapper.set_midi_range(value.to_i, @mapper.midi_max)
+    when 'midi_max'
+      @mapper.set_midi_range(@mapper.midi_min, value.to_i)
+    when 'accel_scale'
+      @mapper.accel_scale = value.to_f
+    when 'filter_cutoff'
+      @presets.patch[:filter]&.set_param(:cutoff, value.to_f) if @presets.patch
+    when 'filter_q'
+      @presets.patch[:filter]&.set_param(:q, value.to_f) if @presets.patch
+    when 'master_gain'
+      JS.global[:synthMasterGain] = value.to_f
+    when 'attack'
+      @presets.patch&.set_attack(value.to_f / 1000.0)
+    when 'decay'
+      @presets.patch&.set_decay(value.to_f / 1000.0)
+    when 'sustain'
+      @presets.patch&.set_sustain(value.to_f)
+    when 'release'
+      @presets.patch&.set_release(value.to_f / 1000.0)
+    end
+  end
+end
+
+begin
+  JS.global[:console].log("[Ruby] starting picoruby-ot synth...")
+  $presets.switch(:otamatone)
+  app = SynthApp.new($serial, $mapper, $presets)
+  app.register_callbacks
+  JS.global[:console].log("[Ruby] picoruby-ot synth ready!")
+rescue => e
+  JS.global[:console].error("[Ruby] Fatal: #{e.message}")
+end
+```
+
+- [ ] **Step 2: Verify API consistency**
+
+- `Serial#receive` (Task 1) is called as `@serial.receive(data.to_s)` ✓
+- `SensorMapper#distance_to_note`, `#note_to_freq`, `#note_name`, `#accel_to_fm_depth`, `#in_range?`, `#set_dist_range`, `#set_midi_range`, `#set_scale`, `#dist_min`, `#dist_max`, `#midi_min`, `#midi_max`, `#accel_scale=` (Task 2) all called correctly ✓
+- `PresetManager#switch`, `#patch` (Task 3) called correctly ✓
+- `JS.global.updateSensorDisplay` now takes 7 args (dist, ax, ay, az, freq, fm_depth, note_str) — must match index.html (Task 5) ✓
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add web/src/ruby/main.rb
+git commit -m "feat: rewrite main.rb as flat orchestrator using Serial/SensorMapper/PresetManager"
+```
+
+---
+
+## Task 5: Rewrite index.html
+
+Cockpit 2-column UI, all panels always visible, 150% zoom. Remove node editor. Add PLAY + FM EDIT panels. Update JS glue for glide_time, fm_depth_manual, mod_ratio, note display, parse error count.
+
+**Files:**
+- Rewrite: `web/index.html`
+
+- [ ] **Step 1: Write index.html**
+
+Replace the entire file with the following:
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>picoruby-ot Synth</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{background:#0e0e0e;color:#ccc;font-family:monospace;font-size:12px;padding:10px;zoom:1.5}
+    h1{color:#0f0;font-size:16px;margin-bottom:10px;border-bottom:1px solid #2a2a2a;padding-bottom:6px}
+    #app{max-width:620px;margin:0 auto}
+    .sec{background:#141414;border:1px solid #2a2a2a;border-radius:4px;padding:8px 10px;margin-bottom:8px}
+    .t{color:#0cc;font-size:10px;font-weight:bold;margin-bottom:6px;text-transform:uppercase;letter-spacing:1px}
+    .row{display:flex;align-items:center;margin-bottom:4px;gap:6px}
+    .row label{width:90px;color:#666;flex-shrink:0;font-size:11px}
+    .row input[type=range]{flex:1;accent-color:#0f0;height:14px}
+    .row .v{width:44px;text-align:right;color:#888;font-size:11px}
+    .r2{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:4px}
+    button{background:#1a1a1a;border:1px solid #444;color:#aaa;cursor:pointer;padding:3px 9px;font-family:monospace;font-size:11px;border-radius:3px}
+    button:hover{border-color:#0f0;color:#0f0}
+    button.active{border-color:#0f0;color:#0f0;background:#0a150a}
+    .st{color:#0f0;font-size:11px;padding:2px 6px;background:#0a150a;border:1px solid #1a3a1a;border-radius:3px}
+    .st.e{color:#f44;background:#150a0a;border-color:#3a1a1a}
+    select{background:#1a1a1a;color:#aaa;border:1px solid #444;font-family:monospace;font-size:11px;padding:2px 4px;border-radius:3px}
+    canvas{display:block;width:100%;border:1px solid #1e1e1e;border-radius:3px}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+    .grid2 .sec{margin-bottom:0}
+    #sg{display:grid;grid-template-columns:repeat(4,1fr);gap:3px;margin-bottom:6px}
+    .sv{background:#1a1a1a;border:1px solid #222;border-radius:3px;padding:3px 6px;text-align:center}
+    .sv .l{color:#444;font-size:9px}
+    .sv .n{color:#0f0;font-size:13px;font-weight:bold;line-height:1.4}
+    .accel-row{display:flex;gap:3px;margin-top:3px}
+    .accel-row .sv{flex:1}
+    #mon{background:#080808;border:1px solid #1a1a1a;border-radius:3px;padding:5px;height:50px;overflow-y:auto;font-size:10px;color:#0a0;word-break:break-all;line-height:1.3}
+  </style>
+</head>
+<body>
+<div id="app">
+  <h1>picoruby-ot Synth</h1>
+
+  <!-- Serial -->
+  <div class="sec">
+    <div class="t">Serial</div>
+    <div class="r2">
+      <button id="bCon" onclick="serialConnect()">Connect</button>
+      <button id="bDis" onclick="serialDisconnect()" disabled>Disconnect</button>
+      <select id="baud"><option value="115200" selected>115200</option><option value="38400">38400</option></select>
+      <span class="st e" id="sst">disconnected</span>
+      <button onclick="initAudio()" style="margin-left:auto">Init Audio</button>
+      <span class="st e" id="ast">audio off</span>
+    </div>
+    <div style="font-size:10px;color:#444;margin-top:2px">
+      Parse errors: <span id="serr" style="color:#f44">0</span>
+    </div>
+  </div>
+
+  <!-- 2-col: PLAY + FM EDIT -->
+  <div class="grid2">
+    <div class="sec">
+      <div class="t">Play</div>
+      <div class="r2" style="margin-bottom:5px">
+        <button id="p_otamatone" class="active" onclick="setPreset('otamatone',this)">Otamatone</button>
+        <button id="p_clean" onclick="setPreset('clean',this)">Clean</button>
+      </div>
+      <div class="r2" style="margin-bottom:5px">
+        <button id="p_acid" onclick="setPreset('acid',this)">Acid</button>
+        <button id="p_retro" onclick="setPreset('retro',this)">Retro</button>
+      </div>
+      <div class="row">
+        <label>Scale</label>
+        <select onchange="p('scale',this.value)">
+          <option value="pentatonic">Pentatonic</option>
+          <option value="major">Major</option>
+          <option value="minor">Minor</option>
+          <option value="chromatic">Chromatic</option>
+        </select>
+      </div>
+      <div class="row">
+        <label>Glide ms</label>
+        <input type="range" min="10" max="2000" value="300" oninput="p('glide_time',this.value);this.nextElementSibling.textContent=this.value">
+        <span class="v">300</span>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="t">FM Edit</div>
+      <div class="row">
+        <label>Carrier</label>
+        <select id="sel_carrier" onchange="p('carrier_wave',this.value)">
+          <option value="triangle" selected>triangle</option>
+          <option value="sine">sine</option>
+          <option value="square">square</option>
+          <option value="sawtooth">sawtooth</option>
+        </select>
+      </div>
+      <div class="row">
+        <label>Mod</label>
+        <select id="sel_mod" onchange="p('mod_wave',this.value)">
+          <option value="triangle" selected>triangle</option>
+          <option value="sine">sine</option>
+          <option value="square">square</option>
+          <option value="sawtooth">sawtooth</option>
+        </select>
+      </div>
+      <div class="row">
+        <label>FM Depth</label>
+        <input type="range" min="0" max="500" value="0" oninput="p('fm_depth_manual',this.value);this.nextElementSibling.textContent=this.value">
+        <span class="v">0</span>
+      </div>
+      <div class="row">
+        <label>Mod Ratio</label>
+        <input type="range" min="0.1" max="4.0" step="0.1" value="1.0" oninput="p('mod_ratio',this.value);this.nextElementSibling.textContent=(+this.value).toFixed(1)">
+        <span class="v">1.0</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Synth Graph (read-only) -->
+  <div class="sec">
+    <div class="t">Synth Patch Graph</div>
+    <canvas id="gcanvas" width="600" height="95"></canvas>
+  </div>
+
+  <!-- 2-col: Sensor + Audio -->
+  <div class="grid2">
+    <div class="sec">
+      <div class="t">Sensor Monitor</div>
+      <div id="sg">
+        <div class="sv"><div class="l">Dist mm</div><div class="n" id="vD">--</div></div>
+        <div class="sv"><div class="l">Note</div><div class="n" id="vN">--</div></div>
+        <div class="sv"><div class="l">Freq Hz</div><div class="n" id="vF">--</div></div>
+        <div class="sv"><div class="l">FM depth</div><div class="n" id="vFM">--</div></div>
+      </div>
+      <canvas id="hcanvas" width="300" height="60"></canvas>
+      <div class="accel-row">
+        <div class="sv"><div class="l">AX</div><div class="n" id="vAX">--</div></div>
+        <div class="sv"><div class="l">AY</div><div class="n" id="vAY">--</div></div>
+        <div class="sv"><div class="l">AZ</div><div class="n" id="vAZ">--</div></div>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="t">Audio Monitor</div>
+      <canvas id="ocanvas" width="300" height="90"></canvas>
+      <canvas id="lcanvas" width="300" height="40" style="margin-top:4px"></canvas>
+    </div>
+  </div>
+
+  <!-- 2-col: Envelope + Mapping -->
+  <div class="grid2">
+    <div class="sec">
+      <div class="t">Envelope ADSR</div>
+      <div class="row"><label>Attack ms</label><input type="range" min="1" max="2000" value="10" oninput="p('attack',this.value);this.nextElementSibling.textContent=this.value"><span class="v">10</span></div>
+      <div class="row"><label>Decay ms</label><input type="range" min="1" max="2000" value="50" oninput="p('decay',this.value);this.nextElementSibling.textContent=this.value"><span class="v">50</span></div>
+      <div class="row"><label>Sustain</label><input type="range" min="0" max="1" step="0.01" value="0.7" oninput="p('sustain',this.value);this.nextElementSibling.textContent=(+this.value).toFixed(2)"><span class="v">0.70</span></div>
+      <div class="row"><label>Release ms</label><input type="range" min="10" max="5000" value="200" oninput="p('release',this.value);this.nextElementSibling.textContent=this.value"><span class="v">200</span></div>
+    </div>
+    <div class="sec">
+      <div class="t">Sensor Mapping</div>
+      <div class="row"><label>Dist Min mm</label><input type="range" min="0" max="500" value="20" oninput="p('dist_min',this.value);this.nextElementSibling.textContent=this.value;_distMin=+this.value"><span class="v">20</span></div>
+      <div class="row"><label>Dist Max mm</label><input type="range" min="100" max="2000" value="900" oninput="p('dist_max',this.value);this.nextElementSibling.textContent=this.value;_distMax=+this.value"><span class="v">900</span></div>
+      <div class="row"><label>Note Min</label><input type="range" min="24" max="72" value="36" oninput="p('midi_min',this.value);this.nextElementSibling.textContent=this.value"><span class="v">36</span></div>
+      <div class="row"><label>Note Max</label><input type="range" min="36" max="96" value="84" oninput="p('midi_max',this.value);this.nextElementSibling.textContent=this.value"><span class="v">84</span></div>
+      <div class="row"><label>Accel Scale</label><input type="range" min="50" max="2000" value="500" oninput="p('accel_scale',this.value);this.nextElementSibling.textContent=this.value"><span class="v">500</span></div>
+    </div>
+  </div>
+
+  <!-- Serial Monitor -->
+  <div class="sec">
+    <div class="t">Serial Monitor</div>
+    <div id="mon"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@ruby/4.0-wasm-wasi@2.8.1/dist/browser.script.iife.js"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/audio_adapter.rb"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/node.rb"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/osc_node.rb"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/fm_op_node.rb"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/filter_node.rb"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/gain_node.rb"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/mixer_node.rb"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/synth_patch.rb"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/web_adapter.rb"></script>
+<script type="text/ruby" src="src/ruby/serial.rb"></script>
+<script type="text/ruby" src="src/ruby/sensor_mapper.rb"></script>
+<script type="text/ruby" src="src/ruby/preset_manager.rb"></script>
+<script type="text/ruby" src="src/ruby/main.rb"></script>
+
+<script>
+// ============================================================
+// Global audio state
+// ============================================================
+let audioContext, analyser, analyserData;
+window.synthMasterGain    = 0.4;
+window.fmDepthScale       = 400;
+window.synthGlideTime     = 0.3;
+window.synthFmDepthManual = 0;
+window.synthModRatio      = 1.0;
+
+const sp = { nodes: {}, outputId: null, pitchIds: [], modIds: [], spec: null, _pending: null };
+let _prevActive = false;
+
+// ============================================================
+// Preset waveform defaults (for syncing dropdowns on preset switch)
+// ============================================================
+const PRESET_WAVES = {
+  otamatone: { carrier: 'triangle', mod: 'triangle' },
+  clean:     { carrier: 'sine',     mod: 'sine' },
+  acid:      { carrier: 'sawtooth', mod: 'sine' },
+  retro:     { carrier: 'square',   mod: 'square' }
+};
+
+function setPreset(name, btn) {
+  document.querySelectorAll('[id^="p_"]').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  p('preset', name);
+  const w = PRESET_WAVES[name];
+  if (w) {
+    document.getElementById('sel_carrier').value = w.carrier;
+    document.getElementById('sel_mod').value     = w.mod;
+  }
+}
+
+// ============================================================
+// Synth graph layout (read-only visualization)
+// ============================================================
+const NW = 108, NH = 34;
+const COLS   = [10, 128, 246, 364, 482];
+const ROW_Y  = [8, 52];
+const GNODES = [
+  { id:'fm_mod',     label:'FM Mod',    row:0, col:0, color:'#2255aa' },
+  { id:'fm_carrier', label:'FM Carrier',row:1, col:0, color:'#2255aa' },
+  { id:'mixer',      label:'Mixer',     row:1, col:1, color:'#553388' },
+  { id:'filter',     label:'Filter',    row:1, col:2, color:'#885522' },
+  { id:'master',     label:'Master',    row:1, col:3, color:'#225533' },
+];
+
+function nodePos(gn) {
+  return { x: COLS[gn.col], y: ROW_Y[gn.row], w: NW, h: NH };
+}
+
+function drawSynthGraph() {
+  const c = document.getElementById('gcanvas');
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  const W = c.width, H = c.height;
+  ctx.fillStyle = '#0a0a0a'; ctx.fillRect(0, 0, W, H);
+
+  if (!sp.spec) {
+    ctx.fillStyle = '#333'; ctx.font = '11px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('Init Audio to build synth patch graph', W / 2, H / 2 + 4);
+    return;
+  }
+
+  // FM arrow (mod → carrier, vertical dashed)
+  const fmMod = nodePos(GNODES[0]), fmCar = nodePos(GNODES[1]);
+  const ax = fmMod.x + fmMod.w / 2, ay1 = fmMod.y + fmMod.h, ay2 = fmCar.y;
+  ctx.strokeStyle = '#6644cc'; ctx.lineWidth = 1.5; ctx.setLineDash([4, 3]);
+  ctx.beginPath(); ctx.moveTo(ax, ay1); ctx.lineTo(ax, ay2); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#6644cc';
+  ctx.beginPath(); ctx.moveTo(ax, ay2); ctx.lineTo(ax-4, ay2-7); ctx.lineTo(ax+4, ay2-7); ctx.fill();
+  ctx.font = '8px monospace'; ctx.textAlign = 'center';
+  ctx.fillText('FM', ax + 14, (ay1 + ay2) / 2 + 3);
+
+  // Main chain arrows
+  const chain = [GNODES[1], GNODES[2], GNODES[3], GNODES[4]];
+  for (let i = 0; i < chain.length - 1; i++) {
+    const a = nodePos(chain[i]), b = nodePos(chain[i + 1]);
+    const x1 = a.x + a.w, y1 = a.y + a.h / 2, x2 = b.x, y2 = b.y + b.h / 2;
+    ctx.strokeStyle = '#2a6a2a'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    ctx.fillStyle = '#2a6a2a';
+    ctx.beginPath(); ctx.moveTo(x2, y2); ctx.lineTo(x2-7, y2-4); ctx.lineTo(x2-7, y2+4); ctx.fill();
+  }
+  const last = nodePos(GNODES[4]);
+  const ox = last.x + last.w + 10, oy = last.y + last.h / 2;
+  ctx.strokeStyle = '#0f0'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(ox + 16, oy); ctx.stroke();
+  ctx.fillStyle = '#0f0'; ctx.font = '16px monospace'; ctx.textAlign = 'left';
+  ctx.fillText('🔊', ox + 10, oy + 5);
+
+  GNODES.forEach(gn => {
+    const { x, y, w, h } = nodePos(gn);
+    const nd = sp.spec ? sp.spec.nodes.find(n => n.id === gn.id) : null;
+    ctx.fillStyle = '#111'; ctx.strokeStyle = gn.color; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.rect(x, y, w, h); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#ccc'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
+    ctx.fillText(gn.label, x + w / 2, y + 13);
+    if (nd) {
+      ctx.fillStyle = '#777'; ctx.font = '9px monospace';
+      const p = nd.params;
+      let summary = '';
+      if (nd.type === 'fm_op' || nd.type === 'oscillator') summary = p.waveform || 'sine';
+      else if (nd.type === 'filter') summary = `${(p.filter_type||'lp').substring(0,2).toUpperCase()} ${p.cutoff||800}Hz`;
+      else if (nd.type === 'gain') summary = `gain:${(+p.gain).toFixed(2)}`;
+      ctx.fillText(summary, x + w / 2, y + 26);
+    }
+  });
+}
+
+// ============================================================
+// SynthPatch: build Web Audio graph from Ruby JSON spec
+// ============================================================
+function ensureAnalyser(outputNode) {
+  if (!analyser) {
+    analyser = audioContext.createAnalyser();
+    analyser.fftSize = 2048;
+    analyser.smoothingTimeConstant = 0.6;
+    analyserData = new Float32Array(analyser.fftSize);
+  }
+  outputNode.connect(analyser);
+  analyser.connect(audioContext.destination);
+}
+
+window.synthPatchBuild = function (json) {
+  if (!audioContext) { sp._pending = json; return; }
+  Object.values(sp.nodes).forEach(n => { try { n.disconnect(); } catch (_) {} });
+  if (analyser) { try { analyser.disconnect(); } catch (_) {} analyser = null; }
+  sp.nodes = {}; sp.outputId = null; sp.pitchIds = []; sp.modIds = [];
+
+  const s = JSON.parse(json);
+  sp.spec = s;
+
+  s.nodes.forEach(ns => {
+    let n;
+    if (ns.type === 'oscillator' || ns.type === 'fm_op') {
+      n = audioContext.createOscillator();
+      n.type = ns.params.waveform || 'sine';
+      n.frequency.value = +ns.params.frequency || 440;
+      if (ns.params.amplitude != null) {
+        const g = audioContext.createGain(); g.gain.value = +ns.params.amplitude;
+        n.connect(g); sp.nodes['_amp_' + ns.id] = g;
+      }
+    } else if (ns.type === 'filter') {
+      n = audioContext.createBiquadFilter();
+      n.type = ns.params.filter_type || 'lowpass';
+      n.frequency.value = +ns.params.cutoff || 1000;
+      n.Q.value = +ns.params.q || 1;
+    } else if (ns.type === 'gain' || ns.type === 'mixer') {
+      n = audioContext.createGain();
+      n.gain.value = ns.type === 'gain' ? (+ns.params.gain || 1) : 1;
+    }
+    if (n) sp.nodes[ns.id] = n;
+  });
+
+  s.connections.forEach(c => {
+    const f = sp.nodes['_amp_' + c.from] || sp.nodes[c.from], t = sp.nodes[c.to];
+    if (f && t) f.connect(t);
+  });
+  s.fm_connections.forEach(fm => {
+    const m = sp.nodes['_amp_' + fm.mod] || sp.nodes[fm.mod], c = sp.nodes[fm.carrier];
+    if (m && c?.frequency) m.connect(c.frequency);
+  });
+
+  if (s.output_node) {
+    sp.outputId = s.output_node;
+    const on = sp.nodes[s.output_node];
+    if (on) {
+      on.gain.value = 0;
+      ensureAnalyser(on);
+      const os = s.nodes.find(n => n.id === s.output_node);
+      if (os?.params.gain != null) window.synthMasterGain = +os.params.gain;
+    }
+  }
+
+  const mods = new Set(s.fm_connections.map(fm => fm.mod));
+  sp.pitchIds = s.nodes.filter(n => (n.type === 'oscillator' || n.type === 'fm_op') && !mods.has(n.id)).map(n => n.id);
+  sp.modIds   = s.nodes.filter(n => mods.has(n.id)).map(n => n.id);
+  s.nodes.forEach(n => {
+    if (n.type === 'oscillator' || n.type === 'fm_op') {
+      const o = sp.nodes[n.id]; if (o) try { o.start(); } catch (_) {}
+    }
+  });
+
+  drawSynthGraph();
+  console.log('[SynthPatch] built:', s.nodes.map(n => n.id).join(', '));
+};
+
+window.synthPatchUpdateParam = function (name, param, val) {
+  const n = sp.nodes[name] || sp.nodes['_amp_' + name];
+  if (!n) return;
+  const pm = { frequency:'frequency', cutoff:'frequency', gain:'gain', q:'Q', waveform:'type', filter_type:'type', amplitude:'gain' };
+  const ap = pm[param] || param;
+  if (n[ap]?.setValueAtTime) n[ap].setValueAtTime(+val, audioContext.currentTime);
+  else if (n[ap] !== undefined) n[ap] = val;
+  if (name === sp.outputId && param === 'gain') window.synthMasterGain = +val;
+};
+
+// Theremin-style sensor-driven update with glide, mod_ratio, manual FM depth
+window.updateSensorParams = function (freq, fmDepth, active) {
+  if (!audioContext || !sp.outputId) return;
+  const now   = audioContext.currentTime;
+  const T     = window.synthGlideTime != null ? window.synthGlideTime : 0.3;
+  const on    = active !== 0;
+  const ratio = window.synthModRatio != null ? window.synthModRatio : 1.0;
+
+  sp.pitchIds.forEach(id => {
+    const n = sp.nodes[id];
+    if (n?.frequency) n.frequency.setTargetAtTime(freq, now, T);
+  });
+  sp.modIds.forEach(id => {
+    const n = sp.nodes[id];
+    if (n?.frequency) n.frequency.setTargetAtTime(freq * ratio, now, T);
+  });
+
+  const manualDepth = window.synthFmDepthManual != null ? window.synthFmDepthManual : 0;
+  const fmAmp = sp.nodes['_amp_fm_mod'];
+  if (fmAmp?.gain) fmAmp.gain.setTargetAtTime(fmDepth * window.fmDepthScale + manualDepth, now, 0.05);
+
+  const out = sp.nodes[sp.outputId];
+  if (out?.gain) out.gain.setTargetAtTime(on ? window.synthMasterGain : 0, now, on !== _prevActive ? 0.01 : T);
+  _prevActive = on;
+};
+
+// ============================================================
+// Sensor history
+// ============================================================
+const HIST_LEN = 120;
+const distHistory = new Array(HIST_LEN).fill(0);
+let _lastAx = 0, _lastAy = 0, _lastAz = 0;
+let _distMin = 20, _distMax = 900;
+
+function pushDistHistory(val) {
+  distHistory.push(+val);
+  if (distHistory.length > HIST_LEN) distHistory.shift();
+}
+
+function drawSensorHistory() {
+  const c = document.getElementById('hcanvas');
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  const W = c.width, H = c.height;
+  ctx.fillStyle = '#080808'; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = '#161616'; ctx.lineWidth = 1;
+  [0.25, 0.5, 0.75].forEach(t => {
+    ctx.beginPath(); ctx.moveTo(0, t * (H - 16)); ctx.lineTo(W, t * (H - 16)); ctx.stroke();
+  });
+  const chartH = H - 18;
+  ctx.strokeStyle = '#00ccee'; ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  distHistory.forEach((v, i) => {
+    const x = i / (HIST_LEN - 1) * W;
+    const y = chartH - (Math.max(0, v - _distMin) / Math.max(1, _distMax - _distMin)) * chartH;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+  ctx.fillStyle = '#335555'; ctx.font = '9px monospace'; ctx.textAlign = 'right';
+  ctx.fillText(_distMax + 'mm', W - 2, 10);
+  ctx.fillText(_distMin + 'mm', W - 2, chartH - 2);
+}
+
+// ============================================================
+// Oscilloscope
+// ============================================================
+function findZeroCrossing(buf, start) {
+  for (let i = start; i < start + 512 && i < buf.length - 1; i++) {
+    if (buf[i] <= 0 && buf[i + 1] > 0) return i;
+  }
+  return start;
+}
+
+function drawOscilloscope() {
+  const c = document.getElementById('ocanvas');
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  const W = c.width, H = c.height;
+  ctx.fillStyle = '#060606'; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = '#131313'; ctx.lineWidth = 1; ctx.setLineDash([2, 4]);
+  [0.25, 0.5, 0.75].forEach(t => {
+    ctx.beginPath(); ctx.moveTo(0, t * H); ctx.lineTo(W, t * H); ctx.stroke();
+  });
+  ctx.setLineDash([]);
+  ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke();
+  if (!analyser) {
+    ctx.fillStyle = '#2a2a2a'; ctx.font = '11px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('Init Audio to enable oscilloscope', W / 2, H / 2 + 4);
+    return;
+  }
+  analyser.getFloatTimeDomainData(analyserData);
+  const offset = findZeroCrossing(analyserData, 100);
+  const samples = Math.min(analyserData.length - offset, W);
+  ctx.strokeStyle = '#00ee66'; ctx.lineWidth = 1.5;
+  ctx.shadowColor = '#00ff55'; ctx.shadowBlur = 4;
+  ctx.beginPath();
+  for (let i = 0; i < samples; i++) {
+    const x = i / samples * W;
+    const y = (1 - (analyserData[offset + i] + 1) / 2) * H;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = '#2a4a2a'; ctx.font = '9px monospace'; ctx.textAlign = 'left';
+  ctx.fillText('OSC', 4, 11);
+}
+
+// ============================================================
+// Level meter
+// ============================================================
+let peakLevel = 0, peakHoldFrames = 0;
+
+function drawLevelMeter() {
+  const c = document.getElementById('lcanvas');
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  const W = c.width, H = c.height;
+  ctx.fillStyle = '#060606'; ctx.fillRect(0, 0, W, H);
+  if (!analyser || !analyserData) return;
+  let sum = 0;
+  for (let i = 0; i < analyserData.length; i++) sum += analyserData[i] * analyserData[i];
+  const rms = Math.sqrt(sum / analyserData.length);
+  const dbFS = rms > 1e-6 ? 20 * Math.log10(rms) : -80;
+  const norm = Math.max(0, Math.min(1, (dbFS + 60) / 60));
+  if (norm > peakLevel) { peakLevel = norm; peakHoldFrames = 40; }
+  else if (peakHoldFrames > 0) peakHoldFrames--;
+  else peakLevel = Math.max(0, peakLevel - 0.005);
+  const barH = H - 18;
+  const hue = norm > 0.85 ? 0 : norm > 0.65 ? 35 : 110;
+  ctx.fillStyle = `hsl(${hue},75%,32%)`;
+  ctx.fillRect(0, 0, W * norm, barH);
+  ctx.fillStyle = `hsl(${peakLevel > 0.85 ? 0 : 80},80%,55%)`;
+  ctx.fillRect(W * peakLevel - 2, 0, 2, barH);
+  const marks = [[-60,'#222'],[-40,'#282828'],[-20,'#2e2e2e'],[-12,'#333'],[-6,'#383838'],[0,'#3a3a3a']];
+  marks.forEach(([db, lc]) => {
+    const x = (db + 60) / 60 * W;
+    ctx.fillStyle = lc; ctx.fillRect(x, 0, 1, barH);
+    ctx.fillStyle = '#444'; ctx.font = '8px monospace'; ctx.textAlign = 'center';
+    ctx.fillText(db + 'dB', x, H - 2);
+  });
+  ctx.fillStyle = '#666'; ctx.font = '9px monospace'; ctx.textAlign = 'left';
+  ctx.fillText(dbFS.toFixed(1) + 'dB', 4, H - 5);
+}
+
+// ============================================================
+// Animation loop
+// ============================================================
+function vizLoop() {
+  requestAnimationFrame(vizLoop);
+  drawOscilloscope();
+  drawLevelMeter();
+}
+vizLoop();
+
+// ============================================================
+// UI callbacks (called from Ruby)
+// ============================================================
+window.updateSensorDisplay = function (d, ax, ay, az, f, fm, note) {
+  _lastAx = +ax; _lastAy = +ay; _lastAz = +az;
+  pushDistHistory(+d);
+  drawSensorHistory();
+  document.getElementById('vD').textContent  = d;
+  document.getElementById('vN').textContent  = note || '--';
+  document.getElementById('vF').textContent  = f;
+  document.getElementById('vFM').textContent = (+fm * 100).toFixed(0) + '%';
+  document.getElementById('vAX').textContent = ax;
+  document.getElementById('vAY').textContent = ay;
+  document.getElementById('vAZ').textContent = az;
+};
+
+window.updateSerialStatus = function (msg, errCount) {
+  const e = document.getElementById('sst');
+  e.textContent = msg;
+  e.className = msg.includes('connected at') ? 'st' : 'st e';
+  document.getElementById('bCon').disabled = msg.includes('connected at');
+  document.getElementById('bDis').disabled = !msg.includes('connected at');
+  if (errCount != null) document.getElementById('serr').textContent = errCount;
+};
+
+window.updateSerialMonitor = function (line) {
+  const e = document.getElementById('mon');
+  e.textContent = (line + '\n' + e.textContent).substring(0, 2000);
+};
+
+// ============================================================
+// Web Serial
+// ============================================================
+let _port, _reader;
+
+async function serialConnect() {
+  try {
+    _port = await navigator.serial.requestPort();
+    const baud = +document.getElementById('baud').value;
+    await _port.open({ baudRate: baud });
+    const dec = new TextDecoderStream(); _port.readable.pipeTo(dec.writable);
+    _reader = dec.readable.getReader();
+    if (window.rubySerialOnConnect) window.rubySerialOnConnect(baud);
+    (async () => {
+      try {
+        while (_port) {
+          const { value, done } = await _reader.read();
+          if (done) break;
+          if (value && window.rubySerialOnReceive) window.rubySerialOnReceive(value);
+        }
+      } catch (e) { console.error('[Serial]', e); }
+      finally { _port = null; if (window.rubySerialOnDisconnect) window.rubySerialOnDisconnect(); }
+    })();
+  } catch (e) {
+    document.getElementById('sst').textContent = e.message;
+    document.getElementById('sst').className = 'st e';
+  }
+}
+
+async function serialDisconnect() {
+  if (_reader) { try { await _reader.cancel(); } catch (_) {} }
+  if (_port)   { try { await _port.close();    } catch (_) {} _port = null; }
+  if (window.rubySerialOnDisconnect) window.rubySerialOnDisconnect();
+}
+
+// ============================================================
+// Audio init (requires user gesture)
+// ============================================================
+async function initAudio() {
+  audioContext = audioContext || new AudioContext();
+  if (audioContext.state === 'suspended') await audioContext.resume();
+  document.getElementById('ast').textContent = audioContext.state;
+  document.getElementById('ast').className = 'st';
+  if (sp._pending) window.synthPatchBuild(sp._pending);
+}
+
+// Param dispatch to Ruby
+function p(key, val) { if (window.rubyOnParamUpdate) window.rubyOnParamUpdate(key, +val || val); }
+
+// Initial placeholder draw
+drawSynthGraph();
+drawSensorHistory();
+</script>
+</body>
+</html>
+```
+
+- [ ] **Step 2: Verify JS/Ruby interface alignment**
+
+- `updateSensorDisplay(d, ax, ay, az, f, fm, note)` — 7 args. main.rb calls `JS.global.updateSensorDisplay(dist, ax, ay, az, freq, fm_depth, note_str)` ✓
+- `updateSerialStatus(msg, errCount)` — 2 args. main.rb calls `JS.global.updateSerialStatus("...", @serial.parse_error_count)` ✓
+- `updateSensorParams` uses `window.synthGlideTime`, `window.synthFmDepthManual`, `window.synthModRatio` — all set by `rubyOnParamUpdate` via main.rb `on_param` ✓
+- `sp.modIds` populated in `synthPatchBuild` for mod oscillator frequency tracking ✓
+- Script tags load order: synth_patch/ → serial.rb → sensor_mapper.rb → preset_manager.rb → main.rb ✓ (js_bridge.rb removed)
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add web/index.html
+git commit -m "feat: rewrite index.html as cockpit UI with PLAY/FM EDIT panels, read-only graph, 150% zoom"
+```
+
+---
+
+## Task 6: Delete obsolete files
+
+Remove the three files replaced by serial.rb.
+
+**Files:**
+- Delete: `web/src/ruby/serial_protocol.rb`
+- Delete: `web/src/ruby/serial_manager.rb`
+- Delete: `web/src/ruby/js_bridge.rb`
+
+- [ ] **Step 1: Delete files**
+
+```bash
+git rm web/src/ruby/serial_protocol.rb web/src/ruby/serial_manager.rb web/src/ruby/js_bridge.rb
+git commit -m "chore: remove serial_protocol.rb, serial_manager.rb, js_bridge.rb (replaced by serial.rb)"
+```
+
+---
+
+## Task 7: Chrome Smoke Test
+
+Open `http://localhost:8000/index.html?v=1` in Chrome. Use `rake web` to start the server first.
+
+- [ ] **Check: page loads at 150% zoom, cockpit 2-column layout visible**
+
+Expected: two columns visible (PLAY | FM EDIT), all panels visible, no expand needed.
+
+- [ ] **Check: Ruby VM starts**
+
+Open DevTools → Console. Expected log:
+```
+[Ruby] starting picoruby-ot synth...
+[SynthPatch] built: fm_mod, fm_carrier, mixer, filter, master
+[Ruby] picoruby-ot synth ready!
+```
+
+- [ ] **Check: Init Audio → synth graph renders**
+
+Click "Init Audio". Expected: `ast` shows "running", synth graph canvas shows FM Mod → FM Carrier → Mixer → Filter → Master → 🔊.
+
+- [ ] **Check: preset buttons**
+
+Click each preset button (Otamatone / Clean / Acid / Retro). Expected: active button turns green, Console logs `[SynthPatch] built:` each time, carrier/mod dropdowns update to preset defaults.
+
+- [ ] **Check: FM Edit sliders**
+
+Move FM Depth slider. Expected: audible FM depth change (if audio active). Move Mod Ratio slider. Expected: modulator pitch changes relative to carrier.
+
+- [ ] **Check: Scale + Glide**
+
+Set Scale to "Major". Move Glide slider to 1000ms. Expected (with hardware): note changes slide slowly between major-scale notes only.
+
+- [ ] **Check: parse error display**
+
+Parse errors counter shows 0 on clean connection. Any malformed serial data increments the counter.
+
+- [ ] **Check: oscilloscope + level meter**
+
+With audio active, oscilloscope shows waveform, level meter responds to volume. Both visible without scrolling.
