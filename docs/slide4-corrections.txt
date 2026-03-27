@@ -1,0 +1,91 @@
+# Slide 4 (Synthesizer) Corrections
+# Generated: 2026-03-27
+# For human to update in presentation app before A3 printing
+
+# VERIFICATION NOTES (checked against actual source files):
+#
+# [OK]  SerialProtocol frame format — confirmed in web/CLAUDE.md architecture diagram
+# [OK]  SensorMapper distance_to_note — confirmed in web/src/ruby/sensor_mapper.rb:47-57
+# [OK]  SensorMapper accel_to_fm_depth — confirmed in web/src/ruby/sensor_mapper.rb:68-72
+# [OK]  4 scales (pentatonic/major/minor/chromatic) — confirmed in sensor_mapper.rb SCALES constant
+# [OK]  PresetManager 4 presets — confirmed in web/src/ruby/preset_manager.rb PRESETS constant
+# [OK]  SynthPatch DSL in ruby.wasm — confirmed in preset_manager.rb + CLAUDE.md
+# [OK]  FM synthesis pattern — confirmed in web/CLAUDE.md JS section
+# [OK]  Web Audio chain — confirmed in web/CLAUDE.md
+# [OK]  3 visualization canvases — confirmed: gcanvas (patch graph), ocanvas (oscilloscope), lcanvas (level meter)
+#       Note: hcanvas (sensor history) also exists but is not part of the synth slide requirements
+# [OK]  ruby.wasm version — @ruby/4.0-wasm-wasi 2.8.1 (from web/CLAUDE.md)
+#
+# [CONCERN] distance_to_note mapping is LINEAR in source code (sensor_mapper.rb:49-51),
+#            not log scale. web/CLAUDE.md file structure comment says "distance→freq (log scale)"
+#            but the actual Ruby implementation uses linear ratio. Slide should say "linear" not "log".
+
+ARCHITECTURE COMPONENTS TO INCLUDE:
+
+1. SerialProtocol (ruby.wasm)
+   - Parses USB serial frames at 115200bps from ATOM Matrix
+   - Frame format: <D:NNNN,AX:NNNN,AY:NNNN,AZ:NNNN>
+   - D = distance (mm), AX/AY/AZ = accelerometer axes
+
+2. SensorMapper (ruby.wasm)
+   - distance_to_note: distance (mm) → linear mapping → MIDI note → scale snap → Hz
+   - Scale snap: 4 scales selectable: pentatonic / major / minor / chromatic
+   - Note-to-Hz: equal temperament, A4=440Hz  (440 * 2^((midi-69)/12))
+   - accel_to_fm_depth: AX+AY+AZ magnitude → FM depth 0.0-1.0
+
+3. PresetManager (ruby.wasm)
+   - 4 presets: otamatone / clean / acid / retro
+   - Each preset defined via SynthPatch DSL
+   - Preset waveforms: triangle, sine, sawtooth, square (varies by preset)
+
+4. SynthPatch DSL (ruby.wasm)
+   - Ruby DSL running in browser via ruby.wasm
+   - Defines FM carrier + FM modulator + filter + gain chain
+   - Serializes to JSON → calls JS.global.synthPatchBuild(json)
+
+5. FM Synthesis (Web Audio API / JS)
+   - carrier OscillatorNode frequency ← modulator OscillatorNode via GainNode (depth)
+   - Modulator connects to carrier.frequency AudioParam (not audio output)
+   - Smooth glide via setTargetAtTime (50ms time constant, theremin-style)
+
+6. Web Audio signal chain (JS)
+   - OscillatorNode (carrier) → BiquadFilterNode → GainNode → AnalyserNode → destination
+
+7. Canvas Visualization (JS)
+   - ocanvas: Oscilloscope (time domain, zero-crossing stabilized)
+   - lcanvas: Level meter (RMS dBFS, peak hold, color gradient)
+   - gcanvas: Synth patch graph (clickable nodes, node editor)
+
+8. ruby.wasm runtime
+   - @ruby/4.0-wasm-wasi 2.8.1
+   - Same Ruby syntax runs in Chrome — reproducible at home without hardware
+
+SIGNAL FLOW (copy this into slide):
+SerialProtocol (ruby.wasm)
+  ↓ parse <D:NNNN,AX:NNNN,AY:NNNN,AZ:NNNN>
+SensorMapper (ruby.wasm)
+  distance_to_note → scale snap (pentatonic/major/minor/chromatic) → Hz
+  accel_to_fm_depth → FM depth 0.0-1.0
+  ↓
+PresetManager (ruby.wasm)
+  4 presets: otamatone / clean / acid / retro
+  SynthPatch DSL → FM carrier + modulator
+  ↓
+Web Audio API (JS)
+  carrier OscillatorNode ← modulator OscillatorNode → frequency AudioParam
+  → BiquadFilterNode → GainNode → AnalyserNode → destination
+  ↓
+Canvas Visualization (JS)
+  oscilloscope | level meter | synth patch graph
+
+LABELS REQUIRED:
+- ruby.wasm (for all Ruby-side components: SerialProtocol, SensorMapper, PresetManager, SynthPatch DSL)
+- Web Audio API (for JS-side audio components)
+- Canvas 2D API (for JS-side visualization)
+- Distinguishing note: "ruby.wasm = same Ruby code, runs in Chrome"
+- Version info (optional): ruby.wasm @ruby/4.0-wasm-wasi 2.8.1
+
+CORRECTION FROM DRAFT:
+- distance mapping: USE "linear" NOT "log" — source code confirms linear ratio mapping
+  (sensor_mapper.rb line 49: ratio = (clamped - dist_min) / (dist_max - dist_min))
+- If slide previously said "log scale pitch mapping", correct it to "linear mapping"
