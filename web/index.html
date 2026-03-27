@@ -632,7 +632,7 @@ setInterval(async () => {
     if (!r.ok) return;
     const d = await r.text();
     if (!d) return;
-    if (!_emuConnected) { _emuConnected = true; if (window.rubySerialOnConnect) window.rubySerialOnConnect(115200); }
+    if (!_emuConnected && window.rubySerialOnConnect) { _emuConnected = true; window.rubySerialOnConnect(115200); }
     if (window.rubySerialOnReceive) window.rubySerialOnReceive(d + '\n');
   } catch (_) {
     if (_emuConnected) { _emuConnected = false; if (window.rubySerialOnDisconnect) window.rubySerialOnDisconnect(); }
