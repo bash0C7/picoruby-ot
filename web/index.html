@@ -167,6 +167,37 @@
     <div class="t">Serial Monitor</div>
     <div id="mon"></div>
   </div>
+
+  <!-- Test Mode -->
+  <div class="sec">
+    <div class="t">Test Mode (no hardware)</div>
+    <div class="r2" style="margin-bottom:6px">
+      <button id="bTCon" onclick="testConnect()">Test Connect</button>
+      <button id="bTDis" onclick="testDisconnect()" disabled>Test Stop</button>
+      <button id="bTLoop" onclick="testToggleLoop()" disabled>Loop</button>
+      <button onclick="testSendOnce()" id="bTSend" disabled>Send Once</button>
+    </div>
+    <div class="row">
+      <label>Dist mm</label>
+      <input type="range" id="tD" min="20" max="900" value="450" oninput="this.nextElementSibling.textContent=this.value">
+      <span class="v">450</span>
+    </div>
+    <div class="row">
+      <label>AX</label>
+      <input type="range" id="tAX" min="-1000" max="1000" value="0" oninput="this.nextElementSibling.textContent=this.value">
+      <span class="v">0</span>
+    </div>
+    <div class="row">
+      <label>AY</label>
+      <input type="range" id="tAY" min="-1000" max="1000" value="0" oninput="this.nextElementSibling.textContent=this.value">
+      <span class="v">0</span>
+    </div>
+    <div class="row">
+      <label>AZ</label>
+      <input type="range" id="tAZ" min="-1000" max="1000" value="0" oninput="this.nextElementSibling.textContent=this.value">
+      <span class="v">0</span>
+    </div>
+  </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@ruby/4.0-wasm-wasi@2.8.1/dist/browser.script.iife.js"></script>
