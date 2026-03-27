@@ -623,21 +623,6 @@ function p(key, val) { if (window.rubyOnParamUpdate) window.rubyOnParamUpdate(ke
 drawSynthGraph();
 drawSensorHistory();
 
-// Emulator polling (otmeiwa_emurator.rb — skipped when real serial connected)
-let _emuConnected = false;
-setInterval(async () => {
-  if (_port) return;
-  try {
-    const r = await fetch('http://localhost:9999/frame');
-    if (!r.ok) return;
-    const d = await r.text();
-    if (!d) return;
-    if (!_emuConnected && window.rubySerialOnConnect) { _emuConnected = true; window.rubySerialOnConnect(115200); }
-    if (window.rubySerialOnReceive) window.rubySerialOnReceive(d + '\n');
-  } catch (_) {
-    if (_emuConnected) { _emuConnected = false; if (window.rubySerialOnDisconnect) window.rubySerialOnDisconnect(); }
-  }
-}, 50);
 </script>
 </body>
 </html>
