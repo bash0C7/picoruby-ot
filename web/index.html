@@ -654,6 +654,56 @@ function p(key, val) { if (window.rubyOnParamUpdate) window.rubyOnParamUpdate(ke
 drawSynthGraph();
 drawSensorHistory();
 
+// ============================================================
+// Test Mode (inline sensor emulation, no hardware needed)
+// ============================================================
+let _testLoop = null;
+
+function _testFrame() {
+  const d  = document.getElementById('tD').value;
+  const ax = document.getElementById('tAX').value;
+  const ay = document.getElementById('tAY').value;
+  const az = document.getElementById('tAZ').value;
+  return `<D:${d},AX:${ax},AY:${ay},AZ:${az}>\n`;
+}
+
+function testConnect() {
+  if (_port) return; // real serial takes priority
+  if (window.rubySerialOnConnect) window.rubySerialOnConnect(115200);
+  document.getElementById('bTCon').disabled  = true;
+  document.getElementById('bTDis').disabled  = false;
+  document.getElementById('bTLoop').disabled = false;
+  document.getElementById('bTSend').disabled = false;
+}
+
+function testDisconnect() {
+  if (_testLoop) { clearInterval(_testLoop); _testLoop = null; }
+  document.getElementById('bTLoop').textContent = 'Loop';
+  document.getElementById('bTCon').disabled  = false;
+  document.getElementById('bTDis').disabled  = true;
+  document.getElementById('bTLoop').disabled = true;
+  document.getElementById('bTSend').disabled = true;
+  if (window.rubySerialOnDisconnect) window.rubySerialOnDisconnect();
+}
+
+function testSendOnce() {
+  if (window.rubySerialOnReceive) window.rubySerialOnReceive(_testFrame());
+}
+
+function testToggleLoop() {
+  const btn = document.getElementById('bTLoop');
+  if (_testLoop) {
+    clearInterval(_testLoop);
+    _testLoop = null;
+    btn.textContent = 'Loop';
+  } else {
+    _testLoop = setInterval(() => {
+      if (window.rubySerialOnReceive) window.rubySerialOnReceive(_testFrame());
+    }, 50);
+    btn.textContent = 'Stop Loop';
+  }
+}
+
 </script>
 </body>
 </html>
