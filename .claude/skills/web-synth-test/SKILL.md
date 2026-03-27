@@ -1,6 +1,6 @@
 ---
 name: web-synth-test
-description: Automated Chrome smoke test for the picoruby-ot web synthesizer. Use this skill whenever you need to verify the synth works after code changes — it starts the web server if needed, opens Chrome, and runs a full automated test sequence: Ruby VM boot, Init Audio, preset buttons, FM Edit controls, and error checks. Trigger on "test the synth", "smoke test", "verify web synth", "check the browser synth", or after any changes to index.html / web/src/ruby/*.rb.
+description: Automated Chrome smoke test for the picoruby-ot web synthesizer. Use this skill whenever you need to verify the synth works after code changes — it starts the web server if needed, opens Chrome, and runs a full automated test sequence: Ruby VM boot, Init Audio, preset buttons, FM Edit controls, Test Mode sensor simulation, and error checks. Trigger on "test the synth", "smoke test", "verify web synth", "check the browser synth", or after any changes to index.html / web/src/ruby/*.rb.
 user-invocable: true
 ---
 
@@ -10,7 +10,7 @@ Runs a Chrome-based smoke test of the picoruby-ot synthesizer at `http://localho
 
 ## Test Sequence
 
-Run steps 1–7 in order. Report a ✅/❌ result for each check.
+Run steps 1–8 in order. Report a ✅/❌ result for each check.
 
 ---
 
@@ -100,7 +100,34 @@ For each:
 
 ---
 
-### Step 7: Check for console errors
+### Step 7: Test Mode — sensor simulation
+
+Scroll to the bottom of the page to find the **Test Mode (no hardware)** section.
+
+1. Click **Test Connect**
+2. Verify:
+   - ✅ Serial status badge changes to `connected at 115200bps`
+   - ✅ "Test Connect" button becomes disabled, "Test Stop" / "Loop" / "Send Once" become enabled
+
+3. Move the **Dist mm** slider to a value other than 450 (e.g. 200), then click **Send Once**
+4. Verify in **Sensor Monitor**:
+   - ✅ `Dist mm` updates to the slider value
+   - ✅ `Note` updates (e.g. G#3)
+   - ✅ `Freq Hz` updates accordingly
+
+5. Click **Loop** — button label changes to "Stop Loop"
+6. Move **Dist mm** slider while loop is running
+7. Verify:
+   - ✅ `Dist mm`, `Note`, `Freq Hz` values update continuously
+   - ✅ Oscilloscope canvas animates (waveform visible)
+   - ✅ Level meter shows activity
+
+8. Click **Stop Loop** → updates stop
+9. Click **Test Stop** → serial status returns to `disconnected`
+
+---
+
+### Step 8: Check for console errors
 
 Call `mcp__claude-in-chrome__read_console_messages` with `pattern: "error|Error|EXCEPTION|Fatal|NameError|TypeError"`.
 
@@ -124,16 +151,18 @@ After all steps, output a summary table:
 | 4 | Cockpit UI layout | ✅ |
 | 5 | Init Audio + graph | ✅ |
 | 6 | Preset buttons (4/4) | ✅ |
-| 7 | No console errors | ✅ |
+| 7 | Test Mode sensor simulation | ✅ |
+| 8 | No console errors | ✅ |
 
-**PASSED 7/7** ピョン。
+**PASSED 8/8** ピョン。
 ```
 
 If any check failed, include the failure detail below the table.
 
 ## Notes
 
-- Tests run in ~30–60s total (ruby.wasm init takes ~10s on first load)
+- Tests run in ~45–75s total (ruby.wasm init takes ~10s on first load)
 - Cache-busting URL prevents stale ruby.wasm bytecode from causing `SerialManager` errors
 - If Ruby VM fails with `uninitialized constant`, the old bytecode is cached — the `?v=<timestamp>` URL forces a fresh load
-- Serial connection tests are NOT automated (require physical hardware)
+- Test Mode feeds synthetic `<D:NNN,AX:NNN,AY:NNN,AZ:NNN>\n` frames via `rubySerialOnReceive()` — same data path as real hardware
+- Real serial (Web Serial API) takes priority over Test Mode — if `_port` is set, Test Connect does nothing
