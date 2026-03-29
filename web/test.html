@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Web Synth Unit Tests</title>
+<style>
+body { font-family: monospace; background: #1a1a2e; color: #e0e0e0; padding: 20px; }
+#test-result { font-size: 24px; font-weight: bold; margin: 20px 0; }
+#test-result.pass { color: #4caf50; }
+#test-result.fail { color: #f44336; }
+#test-detail { color: #999; }
+</style>
+</head>
+<body>
+<h1>Web Synth — Ruby Unit Tests</h1>
+<div id="test-result">Running...</div>
+<div id="test-detail"></div>
+<p>Check browser console for details.</p>
+
+<script src="https://cdn.jsdelivr.net/npm/@ruby/4.0-wasm-wasi@2.8.1/dist/browser.script.iife.js"></script>
+
+<!-- テスト対象コード -->
+<script type="text/ruby" src="src/ruby/synth_patch/audio_adapter.rb"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/node.rb"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/osc_node.rb"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/fm_op_node.rb"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/filter_node.rb"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/gain_node.rb"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/mixer_node.rb"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/synth_patch.rb"></script>
+<script type="text/ruby" src="src/ruby/sensor_mapper.rb"></script>
+<script type="text/ruby" src="src/ruby/serial.rb"></script>
+<script type="text/ruby" src="src/ruby/preset_manager.rb"></script>
+
+<!-- テストフレームワーク -->
+<script type="text/ruby" src="src/ruby/test_helper.rb"></script>
+
+<!-- テストファイル（ここに追加） -->
+
+<!-- テスト実行完了 -->
+<script type="text/ruby">
+test_summary
+el = JS.global[:document].querySelector("#test-result")
+if $fail_count == 0
+  el[:className] = "pass"
+else
+  el[:className] = "fail"
+end
+</script>
+</body>
+</html>
