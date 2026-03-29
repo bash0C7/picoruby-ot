@@ -112,24 +112,29 @@ class SynthApp
 
   private
 
-  NODE_CONTROLS = {
-    fm_mod:     { waveform: "fm-mod-wave", freq: "fm-mod-freq", amp: "fm-mod-amp" },
-    fm_carrier: { waveform: "fm-carrier-wave" },
-    mixer:      { gain_value: "mixer-gain" },
-    filter:     { filter_type: "filter-type", cutoff: "filter-cutoff", q: "filter-q" },
-    master:     { gain_value: "master-gain" }
+  # data-param属性 → ノード属性名マッピング
+  PARAM_ATTRS = {
+    "fm_mod:waveform"     => :waveform,
+    "fm_mod:freq"         => :freq,
+    "fm_mod:amp"          => :amp,
+    "fm_carrier:waveform" => :waveform,
+    "mixer:gain"          => :gain_value,
+    "filter:filter_type"  => :filter_type,
+    "filter:cutoff"       => :cutoff,
+    "filter:q"            => :q,
+    "master:gain"         => :gain_value
   }
 
+  # プリセット切替時にUIコントロール値を同期
   def sync_preset_ui(patch)
     return unless patch
-    NODE_CONTROLS.each do |node_name, attrs|
+    PARAM_ATTRS.each do |param_key, attr|
+      node_name = param_key.split(":")[0].to_sym
       node = patch[node_name]
       next unless node
-      attrs.each do |attr, el_id|
-        val = node.respond_to?(attr) ? node.send(attr) : nil
-        next unless val
-        set_value("##{el_id}", val)
-      end
+      val = node.respond_to?(attr) ? node.send(attr) : nil
+      next unless val
+      set_value("[data-param='#{param_key}']", val)
     end
   end
 
