@@ -18,6 +18,7 @@ class SynthApp
     @adapter.init_audio
     @presets.set_adapter(@adapter)
     @presets.switch(:otamatone)
+    sync_preset_ui(@presets.patch)
     # オシロスコープ・レベルメーター開始
     @ui.start_animation(@adapter.analyser)
     # 初期カーブ描画
@@ -85,7 +86,6 @@ class SynthApp
     when "oct_up"      then @mapper.transpose_up; update_octave_display
     when "oct_down"    then @mapper.transpose_down; update_octave_display
     when "glide"       then @glide_sec = value.to_f / 1000.0
-    when "glide_time"  then @glide_sec = value.to_f / 1000.0
     when "attack"      then @attack = value.to_f / 1000.0
     when "release"     then @release = value.to_f / 1000.0
     when "dist_curve"
@@ -112,14 +112,43 @@ class SynthApp
 
   private
 
+  NODE_CONTROLS = {
+    fm_mod:     { waveform: "fm-mod-wave", freq: "fm-mod-freq", amp: "fm-mod-amp" },
+    fm_carrier: { waveform: "fm-carrier-wave" },
+    mixer:      { gain_value: "mixer-gain" },
+    filter:     { filter_type: "filter-type", cutoff: "filter-cutoff", q: "filter-q" },
+    master:     { gain_value: "master-gain" }
+  }
+
+  def sync_preset_ui(patch)
+    return unless patch
+    NODE_CONTROLS.each do |node_name, attrs|
+      node = patch[node_name]
+      next unless node
+      attrs.each do |attr, el_id|
+        val = node.respond_to?(attr) ? node.send(attr) : nil
+        next unless val
+        set_value("##{el_id}", val)
+      end
+    end
+  end
+
+  def set_value(selector, val)
+    el = JS.global[:document].querySelector(selector)
+    begin
+      el[:value] = val.to_s
+    rescue JS::Error
+    end
+  end
+
   # プリセット切替 — フェードアウト後に再構築
   def switch_preset(name)
     return unless @adapter
     @adapter.update_gain(0.0, @release)
     release_ms = (@release * 1000).to_i + 50
-    app = self
     JS.global.setTimeout(lambda {
       @presets.switch(name)
+      sync_preset_ui(@presets.patch)
       @adapter.update_gain(@volume, @attack)
     }, release_ms)
   end
@@ -146,11 +175,6 @@ class SynthApp
     set_text("#note-display", note_str)
     set_text("#freq-display", "#{freq}Hz")
     set_text("#dist-display", "#{dist}mm")
-    # 旧UI互換コールバック
-    upd = JS.global[:updateSensorDisplay]
-    if upd.typeof != "undefined"
-      JS.global.updateSensorDisplay(dist, ax, ay, az, freq, fm_depth, note_str)
-    end
   end
 
   # JS null安全なテキスト設定
@@ -165,17 +189,21 @@ class SynthApp
 
   # シリアル状態UI更新
   def update_serial_status(msg, err_count)
-    upd = JS.global[:updateSerialStatus]
-    if upd.typeof != "undefined"
-      JS.global.updateSerialStatus(msg, err_count)
+    connected = msg.include?("connected at")
+    el = JS.global[:document].querySelector("#serial-status")
+    begin
+      el[:style][:color] = connected ? "#4caf50" : "#f44336"
+    rescue JS::Error
     end
   end
 
   # シリアルモニターUI更新
   def update_serial_monitor(line)
-    upd = JS.global[:updateSerialMonitor]
-    if upd.typeof != "undefined"
-      JS.global.updateSerialMonitor(line)
+    el = JS.global[:document].querySelector("#serial-monitor")
+    begin
+      current = el[:textContent].to_s
+      el[:textContent] = (line + "\n" + current)[0, 2000]
+    rescue JS::Error
     end
   end
 end
