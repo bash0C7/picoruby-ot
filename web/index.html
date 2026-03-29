@@ -599,20 +599,20 @@
 
 <!-- ── ruby.wasm ── -->
 <script src="https://cdn.jsdelivr.net/npm/@ruby/4.0-wasm-wasi@2.8.1/dist/browser.script.iife.js"></script>
-<script type="text/ruby" src="src/ruby/synth_patch/audio_adapter.rb?v=20260329f"></script>
-<script type="text/ruby" src="src/ruby/synth_patch/node.rb?v=20260329f"></script>
-<script type="text/ruby" src="src/ruby/synth_patch/osc_node.rb?v=20260329f"></script>
-<script type="text/ruby" src="src/ruby/synth_patch/fm_op_node.rb?v=20260329f"></script>
-<script type="text/ruby" src="src/ruby/synth_patch/filter_node.rb?v=20260329f"></script>
-<script type="text/ruby" src="src/ruby/synth_patch/gain_node.rb?v=20260329f"></script>
-<script type="text/ruby" src="src/ruby/synth_patch/mixer_node.rb?v=20260329f"></script>
-<script type="text/ruby" src="src/ruby/synth_patch/synth_patch.rb?v=20260329f"></script>
-<script type="text/ruby" src="src/ruby/synth_patch/web_adapter.rb?v=20260329f"></script>
-<script type="text/ruby" src="src/ruby/serial.rb?v=20260329f"></script>
-<script type="text/ruby" src="src/ruby/sensor_mapper.rb?v=20260329f"></script>
-<script type="text/ruby" src="src/ruby/preset_manager.rb?v=20260329f"></script>
-<script type="text/ruby" src="src/ruby/ui_controller.rb?v=20260329f"></script>
-<script type="text/ruby" src="src/ruby/main.rb?v=20260329f"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/audio_adapter.rb?v=20260329g"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/node.rb?v=20260329g"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/osc_node.rb?v=20260329g"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/fm_op_node.rb?v=20260329g"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/filter_node.rb?v=20260329g"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/gain_node.rb?v=20260329g"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/mixer_node.rb?v=20260329g"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/synth_patch.rb?v=20260329g"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/web_adapter.rb?v=20260329g"></script>
+<script type="text/ruby" src="src/ruby/serial.rb?v=20260329g"></script>
+<script type="text/ruby" src="src/ruby/sensor_mapper.rb?v=20260329g"></script>
+<script type="text/ruby" src="src/ruby/preset_manager.rb?v=20260329g"></script>
+<script type="text/ruby" src="src/ruby/ui_controller.rb?v=20260329g"></script>
+<script type="text/ruby" src="src/ruby/main.rb?v=20260329g"></script>
 
 <script>
 // ============================================================
@@ -628,7 +628,6 @@ document.getElementById('btn-connect').addEventListener('click', async () => {
     const decoder = new TextDecoderStream();
     serialPort.readable.pipeTo(decoder.writable).catch(e => {
       console.error('[Serial pipeTo]', e);
-      appendSerialMonitor('[PIPE ERR] ' + e.message);
     });
     serialReader = decoder.readable.getReader();
     if (window.rubySerialOnConnect) window.rubySerialOnConnect(115200);
@@ -652,10 +651,10 @@ async function readLoop() {
   while (serialReader) {
     try {
       const { value, done } = await serialReader.read();
-      if (done) { appendSerialMonitor('[DISCONNECT] stream ended'); break; }
+      if (done) { console.log('[Serial] stream ended'); break; }
       if (value && window.rubySerialOnReceive) window.rubySerialOnReceive(value);
     } catch (e) {
-      appendSerialMonitor('[ERR] ' + e.message);
+      console.error('[Serial readLoop]', e.message);
       break;
     }
   }
@@ -672,163 +671,6 @@ document.getElementById('btn-init-audio').addEventListener('click', () => {
     document.getElementById('btn-init-audio').style.color = '#4caf50';
   }
 });
-
-// ============================================================
-// SynthPatch: build Web Audio graph from Ruby JSON spec
-// ============================================================
-let audioContext;
-let analyser, analyserData;
-const sp = { nodes: {}, outputId: null, pitchIds: [], modIds: [], spec: null };
-let _prevActive = false;
-
-function ensureAnalyser(outputNode) {
-  if (!analyser) {
-    analyser = audioContext.createAnalyser();
-    analyser.fftSize = 2048;
-    analyser.smoothingTimeConstant = 0.6;
-    analyserData = new Float32Array(analyser.fftSize);
-    window.analyser = analyser;
-    window.analyserData = analyserData;
-  }
-  outputNode.connect(analyser);
-  analyser.connect(audioContext.destination);
-}
-
-window.synthPatchBuild = function(json) {
-  if (!audioContext) {
-    audioContext = new AudioContext();
-  }
-  Object.values(sp.nodes).forEach(n => { try { n.disconnect(); } catch (_) {} });
-  if (analyser) { try { analyser.disconnect(); } catch (_) {} analyser = null; window.analyser = null; }
-  sp.nodes = {}; sp.outputId = null; sp.pitchIds = []; sp.modIds = [];
-
-  const s = JSON.parse(json);
-  sp.spec = s;
-
-  s.nodes.forEach(ns => {
-    let n;
-    if (ns.type === 'oscillator' || ns.type === 'fm_op') {
-      n = audioContext.createOscillator();
-      n.type = ns.params.waveform || 'sine';
-      n.frequency.value = +ns.params.frequency || 440;
-      if (ns.params.amplitude != null) {
-        const g = audioContext.createGain(); g.gain.value = +ns.params.amplitude;
-        n.connect(g); sp.nodes['_amp_' + ns.id] = g;
-      }
-    } else if (ns.type === 'filter') {
-      n = audioContext.createBiquadFilter();
-      n.type = ns.params.filter_type || 'lowpass';
-      n.frequency.value = +ns.params.cutoff || 1000;
-      n.Q.value = +ns.params.q || 1;
-    } else if (ns.type === 'gain' || ns.type === 'mixer') {
-      n = audioContext.createGain();
-      n.gain.value = ns.type === 'gain' ? (+ns.params.gain || 1) : 1;
-    }
-    if (n) sp.nodes[ns.id] = n;
-  });
-
-  s.connections.forEach(c => {
-    const f = sp.nodes['_amp_' + c.from] || sp.nodes[c.from], t = sp.nodes[c.to];
-    if (f && t) f.connect(t);
-  });
-  s.fm_connections.forEach(fm => {
-    const m = sp.nodes['_amp_' + fm.mod] || sp.nodes[fm.mod], c = sp.nodes[fm.carrier];
-    if (m && c?.frequency) m.connect(c.frequency);
-  });
-
-  if (s.output_node) {
-    sp.outputId = s.output_node;
-    const on = sp.nodes[s.output_node];
-    if (on) {
-      on.gain.value = 0;
-      ensureAnalyser(on);
-      const os = s.nodes.find(n => n.id === s.output_node);
-      if (os?.params.gain != null) window.synthMasterGain = +os.params.gain;
-    }
-  }
-
-  const mods = new Set(s.fm_connections.map(fm => fm.mod));
-  sp.pitchIds = s.nodes.filter(n => (n.type === 'oscillator' || n.type === 'fm_op') && !mods.has(n.id)).map(n => n.id);
-  sp.modIds   = s.nodes.filter(n => mods.has(n.id)).map(n => n.id);
-  s.nodes.forEach(n => {
-    if (n.type === 'oscillator' || n.type === 'fm_op') {
-      const o = sp.nodes[n.id]; if (o) try { o.start(); } catch (_) {}
-    }
-  });
-  console.log('[SynthPatch] built:', s.nodes.map(n => n.id).join(', '));
-};
-
-window.synthPatchUpdateParam = function(name, param, val) {
-  const n = sp.nodes[name] || sp.nodes['_amp_' + name];
-  if (!n) return;
-  const pm = { frequency:'frequency', cutoff:'frequency', gain:'gain', q:'Q', waveform:'type', filter_type:'type', amplitude:'gain' };
-  const ap = pm[param] || param;
-  if (n[ap]?.setValueAtTime) n[ap].setValueAtTime(+val, audioContext.currentTime);
-  else if (n[ap] !== undefined) n[ap] = val;
-  if (name === sp.outputId && param === 'gain') window.synthMasterGain = +val;
-};
-
-// Theremin-style sensor-driven update
-window.updateSensorParams = function(freq, fmDepth, active) {
-  if (!audioContext || !sp.outputId) return;
-  const now   = audioContext.currentTime;
-  const T     = window.synthGlideTime != null ? window.synthGlideTime : 0.3;
-  const on    = active !== 0;
-  const ratio = window.synthModRatio != null ? window.synthModRatio : 1.0;
-
-  sp.pitchIds.forEach(id => {
-    const n = sp.nodes[id];
-    if (n?.frequency) n.frequency.setTargetAtTime(freq, now, T);
-  });
-  sp.modIds.forEach(id => {
-    const n = sp.nodes[id];
-    if (n?.frequency) n.frequency.setTargetAtTime(freq * ratio, now, T);
-  });
-
-  const manualDepth = window.synthFmDepthManual != null ? window.synthFmDepthManual : 0;
-  const fmAmp = sp.nodes['_amp_fm_mod'];
-  const depthScale = window.fmDepthScale != null ? window.fmDepthScale : 400;
-  if (fmAmp?.gain) fmAmp.gain.setTargetAtTime(fmDepth * depthScale + manualDepth, now, 0.05);
-
-  const out = sp.nodes[sp.outputId];
-  if (out?.gain) out.gain.setTargetAtTime(on ? (window.synthMasterGain || 0.4) : 0, now, on !== _prevActive ? 0.01 : T);
-  _prevActive = on;
-};
-
-// Init state
-window.synthMasterGain    = 0.4;
-window.fmDepthScale       = 400;
-window.synthGlideTime     = 0.3;
-window.synthFmDepthManual = 0;
-window.synthModRatio      = 1.0;
-
-// ============================================================
-// UI callbacks (called from Ruby)
-// ============================================================
-window.updateSensorDisplay = function(d, ax, ay, az, f, fm, note) {
-  const nd = document.getElementById('note-display');
-  const fd = document.getElementById('freq-display');
-  const dd = document.getElementById('dist-display');
-  if (nd) nd.textContent = note || '--';
-  if (fd) fd.textContent = f + 'Hz';
-  if (dd) dd.textContent = d + 'mm';
-};
-
-window.updateSerialStatus = function(msg, errCount) {
-  const connected = msg.includes('connected at');
-  document.getElementById('serial-status').textContent = '●';
-  document.getElementById('serial-status').style.color = connected ? '#4caf50' : '#f44336';
-};
-
-window.updateSerialMonitor = function(line) {
-  appendSerialMonitor(line);
-};
-
-function appendSerialMonitor(line) {
-  const e = document.getElementById('serial-monitor');
-  if (!e) return;
-  e.textContent = (line + '\n' + e.textContent).substring(0, 2000);
-}
 
 // ============================================================
 // UI event bridge
