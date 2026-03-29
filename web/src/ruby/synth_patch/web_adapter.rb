@@ -1,28 +1,205 @@
 require 'js'
 
-# SynthPatch::WebAdapter: Production adapter using Web Audio API via JS interop.
-# Delegates all audio operations to JavaScript functions defined in index.html.
+# SynthPatch::WebAdapter: Web Audio API direct control via JS.global interop.
+# AudioContextノード直接操作
 class SynthPatch
   class WebAdapter < AudioAdapter
+    attr_reader :analyser
+
+    def initialize
+      @ctx = nil
+      @nodes = {}
+      @analyser = nil
+      @fm_depth_scale = 400
+    end
+
+    def init_audio
+      @ctx = JS.global[:AudioContext].new
+      @analyser = @ctx.createAnalyser
+      @analyser[:fftSize] = 2048
+      @analyser.connect(@ctx[:destination])
+      # JS描画ループ用にグローバル公開
+      JS.global[:analyser] = @analyser
+      JS.global[:analyserData] = JS.global[:Float32Array].new(2048)
+    end
+
+    def audio_context
+      @ctx
+    end
+
     def build_graph(json_spec)
-      JS.global.synthPatchBuild(json_spec.to_s)
+      return unless @ctx
+      disconnect_all
+      spec = JSON.parse(json_spec)
+      build_nodes(spec)
+      connect_nodes(spec)
     end
 
-    def note_on(freq, duty, adsr_params)
-      JS.global.synthPatchNoteOn(
-        freq.to_f,
-        duty.to_f,
-        adsr_params[:attack].to_f,
-        adsr_params[:release].to_f
-      )
+    def update_freq(freq, glide_sec)
+      return unless @ctx
+      now = @ctx[:currentTime].to_f
+      [:fm_carrier, :fm_mod].each do |id|
+        node = @nodes[id]
+        next unless node
+        osc = node[:osc]
+        next unless osc
+        osc[:frequency].setTargetAtTime(freq.to_f, now, [glide_sec.to_f, 0.001].max)
+      end
     end
 
-    def note_off
-      JS.global.synthPatchNoteOff
+    def update_fm_depth(depth)
+      return unless @ctx
+      now = @ctx[:currentTime].to_f
+      node = @nodes[:fm_mod]
+      return unless node
+      gain = node[:gain]
+      return unless gain
+      gain[:gain].setTargetAtTime(depth.to_f * @fm_depth_scale, now, 0.01)
+    end
+
+    def update_gain(target, smoothing)
+      return unless @ctx
+      now = @ctx[:currentTime].to_f
+      node = @nodes[:master]
+      return unless node
+      g = node[:gain_node]
+      return unless g
+      g[:gain].setTargetAtTime(target.to_f, now, [smoothing.to_f, 0.001].max)
     end
 
     def update_param(node_name, param, value)
-      JS.global.synthPatchUpdateParam(node_name.to_s, param.to_s, value)
+      return unless @ctx
+      node = @nodes[node_name.to_sym]
+      return unless node
+      now = @ctx[:currentTime].to_f
+      case param.to_s
+      when "waveform"
+        node[:osc][:type] = value.to_s if node[:osc]
+      when "cutoff"
+        node[:filter][:frequency].setTargetAtTime(value.to_f, now, 0.01) if node[:filter]
+      when "q"
+        node[:filter][:Q].setTargetAtTime(value.to_f, now, 0.01) if node[:filter]
+      when "filter_type"
+        node[:filter][:type] = value.to_s if node[:filter]
+      when "gain"
+        g = node[:gain_node]
+        g[:gain].setTargetAtTime(value.to_f, now, 0.01) if g
+      when "freq"
+        node[:osc][:frequency].setTargetAtTime(value.to_f, now, 0.01) if node[:osc]
+      when "amp"
+        g = node[:gain]
+        g[:gain].setTargetAtTime(value.to_f, now, 0.01) if g
+      end
+    end
+
+    # note_on/note_off: SynthPatch互換インターフェース
+    def note_on(freq, duty, adsr_params)
+      update_freq(freq.to_f, 0.005)
+      update_gain(0.4, adsr_params[:attack].to_f)
+    end
+
+    def note_off
+      update_gain(0.0, 0.2)
+    end
+
+    private
+
+    # 全ノード切断
+    def disconnect_all
+      @nodes.each_value do |n|
+        n.each_value do |web_node|
+          next unless web_node.respond_to?(:disconnect)
+          begin
+            web_node.disconnect
+          rescue
+            nil
+          end
+        end
+      end
+      @nodes = {}
+    end
+
+    # ノード生成 (JSON: { "id": ..., "type": ..., "params": {...} })
+    def build_nodes(spec)
+      (spec["nodes"] || []).each do |node_spec|
+        name = node_spec["id"]&.to_sym
+        next unless name
+        @nodes[name] = create_web_audio_node(node_spec)
+      end
+    end
+
+    # Web Audioノード種別ごと生成
+    def create_web_audio_node(spec)
+      params = spec["params"] || {}
+      case spec["type"]
+      when "fm_op"
+        osc = @ctx.createOscillator
+        osc[:type] = (params["waveform"] || "sine").to_s
+        osc[:frequency][:value] = (params["frequency"] || 220).to_f
+        gain = @ctx.createGain
+        gain[:gain][:value] = (params["amplitude"] || 1.0).to_f
+        osc.connect(gain)
+        osc.start
+        { osc: osc, gain: gain }
+      when "filter"
+        filter = @ctx.createBiquadFilter
+        filter[:type] = (params["filter_type"] || "lowpass").to_s
+        filter[:frequency][:value] = (params["cutoff"] || 1000).to_f
+        filter[:Q][:value] = (params["q"] || 1.0).to_f
+        { filter: filter }
+      when "gain"
+        gain = @ctx.createGain
+        gain[:gain][:value] = (params["gain"] || 1.0).to_f
+        { gain_node: gain }
+      when "mixer"
+        gain = @ctx.createGain
+        gain[:gain][:value] = 1.0
+        { gain_node: gain }
+      else
+        {}
+      end
+    end
+
+    # ノード接続
+    def connect_nodes(spec)
+      # FM変調接続
+      (spec["fm_connections"] || []).each do |fm|
+        mod = @nodes[fm["mod"].to_sym]
+        carrier = @nodes[fm["carrier"].to_sym]
+        next unless mod && carrier
+        mod_out = mod[:gain] || mod[:osc]
+        carrier_osc = carrier[:osc]
+        carrier_freq = carrier_osc ? carrier_osc[:frequency] : nil
+        mod_out.connect(carrier_freq) if mod_out && carrier_freq
+      end
+
+      # シグナルチェーン接続
+      (spec["connections"] || []).each do |conn|
+        from_node = @nodes[conn["from"].to_sym]
+        to_node = @nodes[conn["to"].to_sym]
+        next unless from_node && to_node
+        output = get_output(from_node)
+        input = get_input(to_node)
+        output.connect(input) if output && input
+      end
+
+      # output_node → analyser接続
+      output_id = spec["output_node"]&.to_sym
+      output_node = output_id ? @nodes[output_id] : @nodes[:master]
+      if output_node && @analyser
+        out = get_output(output_node)
+        out.connect(@analyser) if out
+      end
+    end
+
+    # 出力端子取得
+    def get_output(node)
+      node[:gain] || node[:gain_node] || node[:filter] || node[:osc]
+    end
+
+    # 入力端子取得
+    def get_input(node)
+      node[:filter] || node[:gain_node] || node[:osc]
     end
   end
 end
