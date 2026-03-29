@@ -6,6 +6,7 @@ class SynthApp
     @mapper  = mapper
     @presets = presets
     @adapter = nil
+    @ui = UIController.new
     @glide_sec = 0.005
     @attack = 0.01
     @release = 0.2
@@ -17,6 +18,11 @@ class SynthApp
     @adapter.init_audio
     @presets.set_adapter(@adapter)
     @presets.switch(:otamatone)
+    # オシロスコープ・レベルメーター開始
+    @ui.start_animation(@adapter.analyser)
+    # 初期カーブ描画
+    @ui.draw_curve("#dist-curve-canvas", :linear)
+    @ui.draw_curve("#accel-curve-canvas", :linear)
     JS.global[:console].log("[Ruby] Audio initialized")
   end
 
@@ -76,14 +82,20 @@ class SynthApp
     case key
     when "preset"      then switch_preset(value.to_s.to_sym)
     when "scale"       then @mapper.set_scale(value.to_s.to_sym)
-    when "oct_up"      then @mapper.transpose_up
-    when "oct_down"    then @mapper.transpose_down
+    when "oct_up"      then @mapper.transpose_up; update_octave_display
+    when "oct_down"    then @mapper.transpose_down; update_octave_display
     when "glide"       then @glide_sec = value.to_f / 1000.0
     when "glide_time"  then @glide_sec = value.to_f / 1000.0
     when "attack"      then @attack = value.to_f / 1000.0
     when "release"     then @release = value.to_f / 1000.0
-    when "dist_curve"  then @mapper.set_dist_curve(value.to_s.to_sym)
-    when "accel_curve" then @mapper.set_accel_curve(value.to_s.to_sym)
+    when "dist_curve"
+      curve = value.to_s.to_sym
+      @mapper.set_dist_curve(curve)
+      @ui.draw_curve("#dist-curve-canvas", curve)
+    when "accel_curve"
+      curve = value.to_s.to_sym
+      @mapper.set_accel_curve(curve)
+      @ui.draw_curve("#accel-curve-canvas", curve)
     when "dist_min"    then @mapper.set_dist_range(value.to_i, @mapper.dist_max)
     when "dist_max"    then @mapper.set_dist_range(@mapper.dist_min, value.to_i)
     when "midi_min"    then @mapper.set_midi_range(value.to_i, @mapper.midi_max)
@@ -112,14 +124,21 @@ class SynthApp
     }, release_ms)
   end
 
-  def update_display(note_name, freq, dist_mm)
-    doc = JS.global[:document]
-    el = doc.querySelector("#note-display")
-    el[:textContent] = note_name if el
-    el = doc.querySelector("#freq-display")
-    el[:textContent] = "#{freq}Hz" if el
-    el = doc.querySelector("#dist-display")
-    el[:textContent] = "#{dist_mm}mm" if el
+  # オクターブドットインジケーター更新
+  def update_octave_display
+    idx = @ui.octave_index(@mapper.transpose)
+    5.times do |i|
+      dot = JS.global[:document].querySelector("#oct-dot-#{i}")
+      begin
+        if i == idx
+          dot[:classList].add("active")
+        else
+          dot[:classList].remove("active")
+        end
+      rescue JS::Error
+        # element not found
+      end
+    end
   end
 
   # センサーUI更新
