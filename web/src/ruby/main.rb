@@ -18,12 +18,6 @@ class SynthApp
     @presets.set_adapter(@adapter)
     @presets.switch(:otamatone)
     JS.global[:console].log("[Ruby] Audio initialized")
-    # オーディオ状態UI更新
-    ast = JS.global[:document].querySelector("#ast")
-    if ast
-      ast[:textContent] = "audio on"
-      ast[:className] = "st"
-    end
   end
 
   def register_callbacks
@@ -130,25 +124,23 @@ class SynthApp
 
   # センサーUI更新
   def update_sensor_display(dist, ax, ay, az, freq, fm_depth, note_str)
-    doc = JS.global[:document]
-    el = doc.querySelector("#vD")
-    el[:textContent] = dist if el
-    el = doc.querySelector("#vN")
-    el[:textContent] = note_str if el
-    el = doc.querySelector("#vF")
-    el[:textContent] = freq if el
-    el = doc.querySelector("#vFM")
-    el[:textContent] = "#{(fm_depth.to_f * 100).to_i}%" if el
-    el = doc.querySelector("#vAX")
-    el[:textContent] = ax if el
-    el = doc.querySelector("#vAY")
-    el[:textContent] = ay if el
-    el = doc.querySelector("#vAZ")
-    el[:textContent] = az if el
-    # 距離ヒストリー更新 (JS側関数)
+    set_text("#note-display", note_str)
+    set_text("#freq-display", "#{freq}Hz")
+    set_text("#dist-display", "#{dist}mm")
+    # 旧UI互換コールバック
     upd = JS.global[:updateSensorDisplay]
     if upd.typeof != "undefined"
       JS.global.updateSensorDisplay(dist, ax, ay, az, freq, fm_depth, note_str)
+    end
+  end
+
+  # JS null安全なテキスト設定
+  def set_text(selector, text)
+    el = JS.global[:document].querySelector(selector)
+    begin
+      el[:textContent] = text.to_s
+    rescue JS::Error
+      # querySelector returned null
     end
   end
 
