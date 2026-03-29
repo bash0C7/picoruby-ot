@@ -6,185 +6,164 @@ Built with ruby.wasm (@ruby/4.0-wasm-wasi 2.8.1) + Web Audio API.
 ## Language Policy
 
 - Documentation, git comments, code comments: English
-- User communication: Japanese with 「ピョン。」suffix
+- User communication: Japanese with suffix
 - README.md: English only, no bold, no emoji
 
 ## Architecture
 
 ```
 otmeiwa.rb (PicoRuby/ATOM Matrix)
-    │ USB Serial 115200bps
-    │ <D:NNNN,AX:NNNN,AY:NNNN,AZ:NNNN>\n
-    ▼
+    | USB Serial 115200bps
+    | <D:NNNN,AX:NNNN,AY:NNNN,AZ:NNNN>\n
+    v
 index.html (Chrome)
-    ├── Web Serial API → JS → rubySerialOnReceive()
-    ├── ruby.wasm: SerialManager → SerialProtocol → SensorMapper
-    ├── ruby.wasm: SynthPatch DSL → WebAdapter → JS.global.synthPatchBuild(json)
-    └── Web Audio API (FM OscillatorNode + BiquadFilter + GainNode + AnalyserNode)
+    +-- JS: Web Serial async (connect/disconnect/readLoop)
+    +-- ruby.wasm: Serial -> SensorMapper -> WebAdapter (Web Audio)
+    +-- ruby.wasm: UIController (DOM, Canvas)
+    +-- ruby.wasm: SynthPatch DSL -> PresetManager
+```
+
+### Control Principle
+
+```
+HTML  -> Static structure only
+CSS   -> Styling only
+JS    -> Web Serial async only + UI event bridge
+Ruby  -> All control (Web Audio, DOM, Canvas, state, logic)
+```
+
+### Data Flow
+
+```
+Serial Port --JS async--> rubySerialOnReceive
+                              |
+                          Serial.receive
+                              |
+                          SynthApp.update(dist, ax, ay, az)
+                              |
+                    +---------+---------+
+                    v         v         v
+              SensorMapper  WebAdapter  UIController
+              (compute)     (audio)     (display)
 ```
 
 ## File Structure
 
 ```
 web/
-├── index.html              # Single-file app (HTML + CSS + JS + embedded Ruby)
-└── src/ruby/
-    ├── main.rb             # SynthApp: serial callbacks, param updates
-    ├── serial_protocol.rb  # Frame parser <D:,AX:,AY:,AZ:>
-    ├── serial_manager.rb   # Connection state, RX buffer, RX log
-    ├── sensor_mapper.rb    # distance→freq (log scale), accel→FM depth
-    ├── js_bridge.rb        # Ruby↔JS: updateSensorParams, updateSensorDisplay
-    └── synth_patch/        # FM synth DSL (from ruby_sound_visualizer)
-        ├── synth_patch.rb, node.rb, osc_node.rb, fm_op_node.rb
-        ├── filter_node.rb, gain_node.rb, mixer_node.rb
-        ├── audio_adapter.rb, web_adapter.rb
++-- index.html              # Single-file app (HTML + CSS + minimal JS + ruby.wasm)
++-- test.html               # ruby.wasm unit test runner
++-- src/ruby/
+    +-- main.rb             # SynthApp: callbacks, stateless update loop
+    +-- serial.rb           # Frame parser + buffer + RX log
+    +-- sensor_mapper.rb    # distance->note, accel->FM, curves, transpose
+    +-- ui_controller.rb    # DOM updates, Canvas curves, oscilloscope, level meter
+    +-- preset_manager.rb   # Preset definitions, switching
+    +-- test_helper.rb      # Go-style mini test framework
+    +-- *_test.rb           # Unit test files
+    +-- synth_patch/
+        +-- synth_patch.rb, node.rb, fm_op_node.rb, osc_node.rb
+        +-- filter_node.rb, gain_node.rb, mixer_node.rb
+        +-- audio_adapter.rb, web_adapter.rb
 ```
 
 ## ruby.wasm Integration
 
-### JS → Ruby (callbacks)
-
-Register Ruby lambdas on `JS.global` from Ruby code:
+### JS -> Ruby (callbacks)
 
 ```ruby
-JS.global[:rubySerialOnReceive] = lambda do |data|
-  app.on_serial_receive(data)
+JS.global[:rubySerialOnConnect]    = lambda { |baud| app.on_connect(baud) }
+JS.global[:rubySerialOnDisconnect] = lambda { app.on_disconnect }
+JS.global[:rubySerialOnReceive]    = lambda { |data| app.on_receive(data) }
+JS.global[:rubyOnParamUpdate]      = lambda { |key, value| app.on_param(key.to_s, value) }
+JS.global[:rubyInitAudio]          = lambda { app.init_audio }
+```
+
+### Ruby -> Web Audio (direct via JS.global)
+
+```ruby
+@ctx = JS.global[:AudioContext].new
+osc = @ctx.createOscillator
+osc[:frequency].setTargetAtTime(440.0, @ctx[:currentTime].to_f, 0.005)
+```
+
+### Ruby -> DOM (direct via JS.global)
+
+```ruby
+el = JS.global[:document].querySelector("#note-display")
+begin
+  el[:textContent] = "C4"
+rescue JS::Error
 end
 ```
 
-Then call from JS: `rubySerialOnReceive(data)`
-
-### Ruby → JS (calling JS functions)
+### JS::Object nil check (CRITICAL)
 
 ```ruby
-# Call JS function
-JS.global.updateSensorParams(freq, fm_depth, active ? 1 : 0)
-JS.global.synthPatchBuild(json_string)
-
-# Set JS global variable
-JS.global[:synthMasterGain] = 0.4
-
-# JS::Object nil check (CRITICAL)
-# WRONG: obj.nil?  → always returns false on JS::Object
-# CORRECT:
-obj.typeof == "undefined"
+# WRONG: obj.nil?  -> always false on JS::Object
+# For querySelector null results, use begin/rescue:
+begin
+  el[:textContent] = "text"
+rescue JS::Error
+end
 ```
 
 ### SynthPatch DSL
 
 ```ruby
-patch = SynthPatch.build(adapter: SynthPatch::WebAdapter.new) do |syn|
-  mod     = syn.fm_op(:sine, freq: 220, amp: 50, name: :fm_mod)
-  carrier = syn.fm_op(:sine, freq: 220, name: :fm_carrier)
+patch = SynthPatch.build(adapter: adapter) do |syn|
+  mod     = syn.fm_op(:triangle, freq: 220, amp: 150, name: :fm_mod)
+  carrier = syn.fm_op(:triangle, freq: 220, name: :fm_carrier)
   carrier.fm(mod)
   syn.mix(carrier, name: :mixer)
-     .filter(:lowpass, cutoff: 800, q: 1.2, name: :filter)
+     .filter(:lowpass, cutoff: 1200, q: 1.5, name: :filter)
      .gain(0.4, name: :master)
      .out
 end
-
-# Update node parameter
-patch[:filter]&.set_param(:cutoff, 1200)
 ```
 
-`WebAdapter#build(json)` calls `JS.global.synthPatchBuild(json)`.
+## Stateless Update (every frame)
 
-## Web Audio API (JS Side)
-
-### FM Synthesis Pattern
-
-```javascript
-// Carrier OscillatorNode
-carrier = ctx.createOscillator();
-carrier.type = 'sine';
-carrier.frequency.value = 440;
-
-// Modulator → carrier.frequency (FM)
-modulator = ctx.createOscillator();
-modDepth = ctx.createGain();          // FM depth control
-modulator.connect(modDepth);
-modDepth.connect(carrier.frequency);  // Key: connect to frequency AudioParam
+```ruby
+def update(dist_mm, ax, ay, az)
+  freq     = @mapper.note_to_freq(@mapper.distance_to_note(dist_mm))
+  fm_depth = @mapper.accel_to_fm_depth(ax, ay, az)
+  in_range = @mapper.in_range?(dist_mm)
+  @adapter.update_freq(freq, @glide_sec)
+  @adapter.update_fm_depth(fm_depth)
+  @adapter.update_gain(in_range ? @volume : 0.0, in_range ? @attack : @release)
+end
 ```
 
-### Smooth Theremin-style Updates
+No @sounding flag. Default gain=0. setTargetAtTime handles transitions.
 
-```javascript
-// Use setTargetAtTime for smooth glide (no zipper noise)
-const T = 0.05;  // 50ms time constant
-carrier.frequency.setTargetAtTime(freq, ctx.currentTime, T);
-modDepth.gain.setTargetAtTime(fmAmp, ctx.currentTime, T);
-```
+## Web Serial API (JS Only)
 
-### AnalyserNode (Oscilloscope / Level Meter)
-
-```javascript
-analyser = ctx.createAnalyser();
-analyser.fftSize = 2048;
-masterGain.connect(analyser);
-analyser.connect(ctx.destination);
-
-// Oscilloscope: time domain
-const buf = new Float32Array(analyser.fftSize);
-analyser.getFloatTimeDomainData(buf);
-
-// Level: RMS calculation
-let rms = Math.sqrt(buf.reduce((s, v) => s + v*v, 0) / buf.length);
-let dBFS = 20 * Math.log10(rms + 1e-9);
-```
-
-## Web Serial API (Chrome Only)
-
-```javascript
-port = await navigator.serial.requestPort();
-await port.open({ baudRate: 115200 });
-
-const reader = port.readable
-  .pipeThrough(new TextDecoderStream())
-  .getReader();
-
-(async () => {
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    rubySerialOnReceive(value);  // → Ruby
-  }
-})();
-```
-
+Async API kept in JS as glue. Calls `rubySerialOnReceive(value)`.
 Requirements: Chrome only, HTTPS or localhost, user gesture required.
 
-## Visualization (Canvas 2D)
+## Canvas (Ruby Side via UIController)
 
-Four canvas elements in index.html:
-- `gcanvas`: Synth patch graph (clickable nodes, node editor)
-- `hcanvas`: Sensor history (distance sparkline + AX/AY/AZ bars)
-- `ocanvas`: Oscilloscope (zero-crossing stabilized)
-- `lcanvas`: Level meter (RMS dBFS, peak hold, color gradient)
+- `#oscilloscope`: Waveform (AnalyserNode)
+- `#level-meter`: RMS level bar
+- `#dist-curve-canvas`: Distance->pitch curve (Lin/Log/Exp/S)
+- `#accel-curve-canvas`: Accel->FM depth curve
 
-Canvas scaling for HiDPI:
-```javascript
-const rect = canvas.getBoundingClientRect();
-const sx = canvas.width / rect.width;   // click X scale
-const sy = canvas.height / rect.height; // click Y scale
-```
+## Testing
+
+Unit tests: `test.html` + `test_helper.rb` (Go test style). 127 tests.
+Cache: ruby.wasm caches aggressively. Bump `?v=` suffix when changing Ruby files.
 
 ## JS Minimalism Policy
 
-**Keep JS to Web API glue only.** All logic in Ruby (ruby.wasm).
-
-- JS handles: Web Serial connect/disconnect, Web Audio node wiring, Canvas draw loop
-- Ruby handles: Frame parsing, sensor mapping, synth parameter calculation, state management
-- Do NOT implement business logic in JS
+JS is Web Serial async glue + UI event bridge only. All logic in Ruby.
 
 ## Development Workflow
 
 1. Edit Ruby files in `web/src/ruby/`
-2. Edit `web/index.html` for JS/HTML/CSS changes
-3. Serve: `cd web && ruby -run -ehttpd . -p8000`
-4. Open: `http://localhost:8000/index.html` in Chrome
-5. Verify: Check Chrome DevTools console for errors
-
-Cache note: ruby.wasm aggressively caches. Append `?v=N` to URL when testing changes.
+2. Test: `http://localhost:8000/test.html`
+3. Verify: `http://localhost:8000/index.html`
+4. Cache: Bump `?v=` suffix when changing Ruby files
 
 ## Commit Policy
 
