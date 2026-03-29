@@ -611,18 +611,29 @@ async function serialConnect() {
     _port = await navigator.serial.requestPort();
     const baud = +document.getElementById('baud').value;
     await _port.open({ baudRate: baud });
-    const dec = new TextDecoderStream(); _port.readable.pipeTo(dec.writable);
+    const dec = new TextDecoderStream();
+    _port.readable.pipeTo(dec.writable).catch(e => {
+      console.error('[Serial pipeTo]', e);
+      if (window.updateSerialMonitor) window.updateSerialMonitor('[PIPE ERR] ' + e.message);
+    });
     _reader = dec.readable.getReader();
     if (window.rubySerialOnConnect) window.rubySerialOnConnect(baud);
     (async () => {
       try {
         while (_port) {
           const { value, done } = await _reader.read();
-          if (done) break;
+          if (done) { if (window.updateSerialMonitor) window.updateSerialMonitor('[DISCONNECT] stream ended (done)'); break; }
           if (value && window.rubySerialOnReceive) window.rubySerialOnReceive(value);
         }
-      } catch (e) { console.error('[Serial]', e); }
-      finally { _port = null; if (window.rubySerialOnDisconnect) window.rubySerialOnDisconnect(); }
+      } catch (e) {
+        console.error('[Serial]', e);
+        if (window.updateSerialMonitor) window.updateSerialMonitor('[DISCONNECT ERR] ' + e.message);
+      }
+      finally {
+        const ts = new Date().toLocaleTimeString();
+        if (window.updateSerialMonitor) window.updateSerialMonitor('[DISCONNECT] at ' + ts);
+        _port = null; if (window.rubySerialOnDisconnect) window.rubySerialOnDisconnect();
+      }
     })();
   } catch (e) {
     document.getElementById('sst').textContent = e.message;
