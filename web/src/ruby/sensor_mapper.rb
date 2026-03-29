@@ -4,7 +4,7 @@ class SensorMapper
   MIDI_MIN_DEFAULT = 36
   MIDI_MAX_DEFAULT = 84
 
-  NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']
+  NOTE_NAMES = ['C','C#','D','Eb','E','F','F#','G','G#','A','Bb','B']
   SCALES = {
     chromatic:  [0,1,2,3,4,5,6,7,8,9,10,11],
     major:      [0,2,4,5,7,9,11],
@@ -13,7 +13,7 @@ class SensorMapper
   }
 
   attr_accessor :accel_scale
-  attr_reader :dist_min, :dist_max, :midi_min, :midi_max, :dist_curve, :accel_curve
+  attr_reader :dist_min, :dist_max, :midi_min, :midi_max, :dist_curve, :accel_curve, :transpose
 
   def initialize
     @accel_scale = 500.0
@@ -24,6 +24,7 @@ class SensorMapper
     @scale       = :pentatonic
     @dist_curve  = :linear
     @accel_curve = :linear
+    @transpose   = 0
     build_scale_notes
   end
 
@@ -52,12 +53,20 @@ class SensorMapper
     @accel_curve = type
   end
 
+  def transpose_up
+    @transpose = (@transpose + 12).clamp(-24, 24)
+  end
+
+  def transpose_down
+    @transpose = (@transpose - 12).clamp(-24, 24)
+  end
+
   def distance_to_note(dist_mm)
     clamped = dist_mm.clamp(@dist_min, @dist_max)
     ratio   = (clamped - @dist_min).to_f / (@dist_max - @dist_min)
     curved  = apply_curve(ratio, @dist_curve)
     raw     = @midi_min + (curved * (@midi_max - @midi_min)).round
-    snap_to_scale(raw)
+    snap_to_scale(raw) + @transpose
   end
 
   # equal temperament: MIDI 69 = A4 = 440Hz, semitone = 2^(1/12)

@@ -23,8 +23,8 @@ m = SensorMapper.new
 assert_equal "A4", m.note_name(69), "MIDI 69 = A4"
 assert_equal "C4", m.note_name(60), "MIDI 60 = C4"
 assert_equal "C2", m.note_name(36), "MIDI 36 = C2"
-assert_equal "A#4", m.note_name(70), "MIDI 70 = A#4 (sharp notation)"
-assert_equal "D#4", m.note_name(63), "MIDI 63 = D#4 (sharp notation)"
+assert_equal "Bb4", m.note_name(70), "MIDI 70 = Bb4 (mixed notation)"
+assert_equal "Eb4", m.note_name(63), "MIDI 63 = Eb4 (mixed notation)"
 
 group "SensorMapper#distance_to_note — chromatic"
 
@@ -158,3 +158,49 @@ depth_exp = m.accel_to_fm_depth(100, 100, 100)
 m2 = SensorMapper.new
 depth_lin = m2.accel_to_fm_depth(100, 100, 100)
 assert(depth_exp <= depth_lin, "exp curve: depth_exp(#{depth_exp}) <= depth_lin(#{depth_lin})")
+
+group "SensorMapper — transpose"
+
+m = SensorMapper.new
+assert_equal 0, m.transpose, "default transpose = 0"
+
+m.transpose_up
+assert_equal 12, m.transpose, "transpose_up → +12"
+
+m.transpose_up
+assert_equal 24, m.transpose, "transpose_up → +24"
+
+m.transpose_up
+assert_equal 24, m.transpose, "clamped at +24"
+
+m.transpose_down
+assert_equal 12, m.transpose, "transpose_down → +12"
+
+4.times { m.transpose_down }
+assert_equal(-24, m.transpose, "clamped at -24")
+
+group "SensorMapper#distance_to_note — with transpose"
+
+m = SensorMapper.new
+m.set_scale(:chromatic)
+base_note = m.distance_to_note(460)
+m.transpose_up
+transposed_note = m.distance_to_note(460)
+assert_equal base_note + 12, transposed_note, "transpose +12 applied"
+
+group "SensorMapper#note_name — mixed notation"
+
+m = SensorMapper.new
+assert_equal "C4", m.note_name(60), "C4"
+assert_equal "C#4", m.note_name(61), "C#4"
+assert_equal "D4", m.note_name(62), "D4"
+assert_equal "Eb4", m.note_name(63), "Eb4"
+assert_equal "E4", m.note_name(64), "E4"
+assert_equal "F4", m.note_name(65), "F4"
+assert_equal "F#4", m.note_name(66), "F#4"
+assert_equal "G4", m.note_name(67), "G4"
+assert_equal "G#4", m.note_name(68), "G#4"
+assert_equal "A4", m.note_name(69), "A4"
+assert_equal "Bb4", m.note_name(70), "Bb4"
+assert_equal "B4", m.note_name(71), "B4"
+assert_equal "C5", m.note_name(72), "C5"
