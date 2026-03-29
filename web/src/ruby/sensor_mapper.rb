@@ -62,6 +62,16 @@ class SensorMapper
     ((ax.abs + ay.abs + az.abs).to_f / @accel_scale).clamp(0.0, 1.0)
   end
 
+  def apply_curve(ratio, curve_type)
+    case curve_type
+    when :linear  then ratio
+    when :log     then Math.log(1 + ratio * 9) / Math.log(10)
+    when :exp     then (10 ** ratio - 1) / 9.0
+    when :s_curve then ratio * ratio * (3 - 2 * ratio)
+    else ratio
+    end
+  end
+
   def in_range?(dist_mm)
     dist_mm >= @dist_min && dist_mm <= @dist_max
   end

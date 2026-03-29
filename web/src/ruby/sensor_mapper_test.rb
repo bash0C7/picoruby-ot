@@ -96,3 +96,33 @@ m = SensorMapper.new
 m.set_midi_range(48, 72)
 assert_equal 48, m.midi_min, "midi_min updated"
 assert_equal 72, m.midi_max, "midi_max updated"
+
+group "SensorMapper#apply_curve — linear"
+
+m = SensorMapper.new
+assert_in_delta(0.0, m.apply_curve(0.0, :linear), 0.001, "linear 0.0")
+assert_in_delta(0.5, m.apply_curve(0.5, :linear), 0.001, "linear 0.5")
+assert_in_delta(1.0, m.apply_curve(1.0, :linear), 0.001, "linear 1.0")
+
+group "SensorMapper#apply_curve — log"
+
+m = SensorMapper.new
+assert_in_delta(0.0, m.apply_curve(0.0, :log), 0.001, "log 0.0")
+val = m.apply_curve(0.5, :log)
+assert(val > 0.5, "log 0.5 > 0.5 (early sensitivity): #{val}")
+assert_in_delta(1.0, m.apply_curve(1.0, :log), 0.001, "log 1.0")
+
+group "SensorMapper#apply_curve — exp"
+
+m = SensorMapper.new
+assert_in_delta(0.0, m.apply_curve(0.0, :exp), 0.001, "exp 0.0")
+val = m.apply_curve(0.5, :exp)
+assert(val < 0.5, "exp 0.5 < 0.5 (late sensitivity): #{val}")
+assert_in_delta(1.0, m.apply_curve(1.0, :exp), 0.001, "exp 1.0")
+
+group "SensorMapper#apply_curve — s_curve"
+
+m = SensorMapper.new
+assert_in_delta(0.0, m.apply_curve(0.0, :s_curve), 0.001, "s_curve 0.0")
+assert_in_delta(0.5, m.apply_curve(0.5, :s_curve), 0.001, "s_curve 0.5 = midpoint")
+assert_in_delta(1.0, m.apply_curve(1.0, :s_curve), 0.001, "s_curve 1.0")
