@@ -1,352 +1,705 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <title>picoruby-ot Synth</title>
   <style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{background:#0e0e0e;color:#ccc;font-family:monospace;font-size:12px;padding:10px;zoom:1.5}
-    h1{color:#0f0;font-size:16px;margin-bottom:10px;border-bottom:1px solid #2a2a2a;padding-bottom:6px}
-    #app{max-width:620px;margin:0 auto}
-    .sec{background:#141414;border:1px solid #2a2a2a;border-radius:4px;padding:8px 10px;margin-bottom:8px}
-    .t{color:#0cc;font-size:10px;font-weight:bold;margin-bottom:6px;text-transform:uppercase;letter-spacing:1px}
-    .row{display:flex;align-items:center;margin-bottom:4px;gap:6px}
-    .row label{width:90px;color:#666;flex-shrink:0;font-size:11px}
-    .row input[type=range]{flex:1;accent-color:#0f0;height:14px}
-    .row .v{width:44px;text-align:right;color:#888;font-size:11px}
-    .r2{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:4px}
-    button{background:#1a1a1a;border:1px solid #444;color:#aaa;cursor:pointer;padding:3px 9px;font-family:monospace;font-size:11px;border-radius:3px}
-    button:hover{border-color:#0f0;color:#0f0}
-    button.active{border-color:#0f0;color:#0f0;background:#0a150a}
-    .st{color:#0f0;font-size:11px;padding:2px 6px;background:#0a150a;border:1px solid #1a3a1a;border-radius:3px}
-    .st.e{color:#f44;background:#150a0a;border-color:#3a1a1a}
-    select{background:#1a1a1a;color:#aaa;border:1px solid #444;font-family:monospace;font-size:11px;padding:2px 4px;border-radius:3px}
-    canvas{display:block;width:100%;border:1px solid #1e1e1e;border-radius:3px}
-    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
-    .grid2 .sec{margin-bottom:0}
-    #sg{display:grid;grid-template-columns:repeat(4,1fr);gap:3px;margin-bottom:6px}
-    .sv{background:#1a1a1a;border:1px solid #222;border-radius:3px;padding:3px 6px;text-align:center}
-    .sv .l{color:#444;font-size:9px}
-    .sv .n{color:#0f0;font-size:13px;font-weight:bold;line-height:1.4}
-    .accel-row{display:flex;gap:3px;margin-top:3px}
-    .accel-row .sv{flex:1}
-    #mon{background:#080808;border:1px solid #1a1a1a;border-radius:3px;padding:5px;height:50px;overflow-y:auto;font-size:10px;color:#0a0;word-break:break-all;line-height:1.3}
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #1a1a2e;
+      color: #ccc;
+      font-family: monospace;
+      font-size: 12px;
+      width: 100vw;
+      overflow-x: hidden;
+    }
+
+    /* ── Header Bar ── */
+    #header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      background: #12122a;
+      border-bottom: 1px solid #2a2a4a;
+      flex-wrap: wrap;
+    }
+    #header button {
+      padding: 5px 12px;
+      background: #1e1e3a;
+      border: 1px solid #4444aa;
+      color: #aab;
+      cursor: pointer;
+      font-family: monospace;
+      font-size: 12px;
+      border-radius: 3px;
+    }
+    #header button:hover { border-color: #4caf50; color: #4caf50; }
+    #header #btn-init-audio { border-color: #6644cc; color: #9977ee; }
+    #serial-status { font-size: 18px; color: #f44336; line-height: 1; }
+    #header-spacer { flex: 1; }
+    #note-info {
+      display: flex;
+      gap: 12px;
+      font-size: 13px;
+      color: #aaa;
+    }
+    #note-display { color: #4caf50; font-weight: bold; font-size: 15px; }
+    #freq-display { color: #6cf; }
+    #dist-display { color: #fc6; }
+
+    /* ── Main Area ── */
+    #main { padding: 10px 12px; }
+
+    /* ── Section common ── */
+    .sec {
+      background: #14142a;
+      border: 1px solid #2a2a4a;
+      border-radius: 5px;
+      padding: 10px 12px;
+      margin-bottom: 10px;
+    }
+    .sec-title {
+      color: #7777cc;
+      font-size: 10px;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+    }
+
+    /* ── Synth Patch Graph ── */
+    #patch-graph {
+      display: flex;
+      align-items: flex-start;
+      gap: 0;
+      overflow-x: auto;
+      padding-bottom: 4px;
+    }
+
+    /* Arrow between nodes */
+    .node-arrow {
+      display: flex;
+      align-items: center;
+      color: #4caf50;
+      font-size: 16px;
+      padding: 0 4px;
+      align-self: center;
+      margin-top: 16px;
+    }
+    .node-arrow.fm {
+      color: #6644cc;
+      font-size: 12px;
+      flex-direction: column;
+      align-self: flex-start;
+      margin-top: 4px;
+      padding: 0 2px;
+    }
+
+    /* Node box */
+    .node {
+      background: #0e0e1e;
+      border: 1px solid #2a2a6a;
+      border-radius: 4px;
+      padding: 6px 8px;
+      min-width: 120px;
+      flex-shrink: 0;
+    }
+    .node-title {
+      font-size: 10px;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid #2a2a4a;
+    }
+    .node.fm-mod .node-title   { color: #9966ff; border-color: #4433aa; }
+    .node.fm-carrier .node-title { color: #9966ff; border-color: #4433aa; }
+    .node.mixer .node-title    { color: #cc88ff; border-color: #552299; }
+    .node.filter .node-title   { color: #ffaa44; border-color: #664422; }
+    .node.master .node-title   { color: #4caf50; border-color: #225533; }
+
+    .node-row {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      margin-bottom: 4px;
+    }
+    .node-row label {
+      width: 52px;
+      color: #666;
+      font-size: 10px;
+      flex-shrink: 0;
+    }
+    .node-row input[type="range"] {
+      flex: 1;
+      accent-color: #4caf50;
+      height: 12px;
+      min-width: 60px;
+    }
+    .node-row select {
+      flex: 1;
+      background: #1a1a2e;
+      color: #aaa;
+      border: 1px solid #444;
+      font-family: monospace;
+      font-size: 10px;
+      padding: 1px 3px;
+      border-radius: 2px;
+    }
+    .node-row .nv {
+      width: 36px;
+      text-align: right;
+      color: #777;
+      font-size: 10px;
+      flex-shrink: 0;
+    }
+
+    /* FM mod group (vertically stacked above carrier) */
+    #fm-group {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0;
+      flex-shrink: 0;
+    }
+    #fm-arrow-vert {
+      color: #6644cc;
+      font-size: 12px;
+      text-align: center;
+      line-height: 1.4;
+      padding: 2px 0;
+    }
+
+    /* ── Mid Panel ── */
+    #mid-panel {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    /* Curve buttons */
+    .curve-buttons {
+      display: flex;
+      gap: 3px;
+      margin-bottom: 4px;
+    }
+    .curve-buttons button {
+      padding: 2px 8px;
+      background: #1a1a2e;
+      border: 1px solid #333;
+      color: #777;
+      cursor: pointer;
+      font-family: monospace;
+      font-size: 10px;
+      border-radius: 2px;
+    }
+    .curve-buttons button:hover { border-color: #4caf50; color: #4caf50; }
+    .curve-buttons button.active { border-color: #4caf50; color: #4caf50; background: #0a1a0a; }
+    .curve-label {
+      color: #555;
+      font-size: 10px;
+      margin-bottom: 3px;
+    }
+    canvas.curve-canvas {
+      display: block;
+      width: 100%;
+      height: 50px;
+      border: 1px solid #1e1e3a;
+      border-radius: 2px;
+      margin-bottom: 6px;
+    }
+
+    /* Transport buttons */
+    .btn-group {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+      margin-bottom: 6px;
+    }
+    .btn-group button {
+      padding: 3px 9px;
+      background: #1a1a2e;
+      border: 1px solid #333;
+      color: #888;
+      cursor: pointer;
+      font-family: monospace;
+      font-size: 11px;
+      border-radius: 3px;
+    }
+    .btn-group button:hover { border-color: #4caf50; color: #4caf50; }
+    .btn-group button.active { border-color: #4caf50; color: #4caf50; background: #0a150a; }
+
+    .ctrl-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+    .ctrl-row label { width: 64px; color: #666; font-size: 10px; flex-shrink: 0; }
+    .ctrl-row input[type="range"] { flex: 1; accent-color: #4caf50; height: 12px; }
+    .ctrl-row .cv { width: 40px; text-align: right; color: #777; font-size: 10px; flex-shrink: 0; }
+
+    /* Octave control */
+    #oct-display {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+    #oct-display label { color: #666; font-size: 10px; }
+    #oct-display .oct-dots {
+      display: flex;
+      gap: 3px;
+    }
+    .oct-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #333;
+      border: 1px solid #444;
+    }
+    .oct-dot.active { background: #4caf50; border-color: #4caf50; }
+    #oct-display button {
+      padding: 1px 7px;
+      background: #1a1a2e;
+      border: 1px solid #333;
+      color: #888;
+      cursor: pointer;
+      font-family: monospace;
+      font-size: 11px;
+      border-radius: 2px;
+    }
+    #oct-display button:hover { border-color: #4caf50; color: #4caf50; }
+
+    /* ── Audio Monitor ── */
+    #audio-monitor {
+      display: grid;
+      grid-template-columns: 3fr 1fr;
+      gap: 8px;
+      align-items: stretch;
+    }
+    canvas#oscilloscope {
+      display: block;
+      width: 100%;
+      height: 80px;
+      border: 1px solid #1e1e3a;
+      border-radius: 3px;
+    }
+    canvas#level-meter {
+      display: block;
+      width: 100%;
+      height: 80px;
+      border: 1px solid #1e1e3a;
+      border-radius: 3px;
+    }
+
+    /* ── Serial & Test (collapsible) ── */
+    details { margin-bottom: 10px; }
+    details summary {
+      color: #7777cc;
+      font-size: 10px;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      cursor: pointer;
+      padding: 8px 12px;
+      background: #14142a;
+      border: 1px solid #2a2a4a;
+      border-radius: 5px;
+      list-style: none;
+    }
+    details summary::-webkit-details-marker { display: none; }
+    details summary::before { content: "▶ "; color: #4444aa; }
+    details[open] summary {
+      border-bottom-left-radius: 0;
+      border-bottom-right-radius: 0;
+      border-bottom: none;
+    }
+    details[open] summary::before { content: "▼ "; }
+    .details-body {
+      background: #14142a;
+      border: 1px solid #2a2a4a;
+      border-top: none;
+      border-bottom-left-radius: 5px;
+      border-bottom-right-radius: 5px;
+      padding: 10px 12px;
+    }
+    #serial-monitor {
+      background: #080812;
+      border: 1px solid #1a1a3a;
+      border-radius: 3px;
+      padding: 6px;
+      height: 60px;
+      overflow-y: auto;
+      font-size: 10px;
+      color: #4caf50;
+      word-break: break-all;
+      line-height: 1.4;
+    }
   </style>
 </head>
 <body>
-<div id="app">
-  <h1>picoruby-ot Synth</h1>
 
-  <!-- Serial -->
-  <div class="sec">
-    <div class="t">Serial</div>
-    <div class="r2">
-      <button id="bCon" onclick="serialConnect()">Connect</button>
-      <button id="bDis" onclick="serialDisconnect()" disabled>Disconnect</button>
-      <select id="baud"><option value="115200" selected>115200</option><option value="38400">38400</option></select>
-      <span class="st e" id="sst">disconnected</span>
-      <button onclick="initAudio()" style="margin-left:auto">Init Audio</button>
-      <span class="st e" id="ast">audio off</span>
-    </div>
-    <div style="font-size:10px;color:#444;margin-top:2px">
-      Parse errors: <span id="serr" style="color:#f44">0</span>
-    </div>
-  </div>
-
-  <!-- 2-col: PLAY + FM EDIT -->
-  <div class="grid2">
-    <div class="sec">
-      <div class="t">Play</div>
-      <div class="r2" style="margin-bottom:5px">
-        <button id="p_otamatone" class="active" onclick="setPreset('otamatone',this)">Otamatone</button>
-        <button id="p_clean" onclick="setPreset('clean',this)">Clean</button>
-      </div>
-      <div class="r2" style="margin-bottom:5px">
-        <button id="p_acid" onclick="setPreset('acid',this)">Acid</button>
-        <button id="p_retro" onclick="setPreset('retro',this)">Retro</button>
-      </div>
-      <div class="row">
-        <label>Scale</label>
-        <select onchange="p('scale',this.value)">
-          <option value="pentatonic">Pentatonic</option>
-          <option value="major">Major</option>
-          <option value="minor">Minor</option>
-          <option value="chromatic">Chromatic</option>
-        </select>
-      </div>
-      <div class="row">
-        <label>Glide ms</label>
-        <input type="range" min="10" max="2000" value="300" oninput="p('glide_time',this.value);this.nextElementSibling.textContent=this.value">
-        <span class="v">300</span>
-      </div>
-    </div>
-    <div class="sec">
-      <div class="t">FM Edit</div>
-      <div class="row">
-        <label>Carrier</label>
-        <select id="sel_carrier" onchange="p('carrier_wave',this.value)">
-          <option value="triangle" selected>triangle</option>
-          <option value="sine">sine</option>
-          <option value="square">square</option>
-          <option value="sawtooth">sawtooth</option>
-        </select>
-      </div>
-      <div class="row">
-        <label>Mod</label>
-        <select id="sel_mod" onchange="p('mod_wave',this.value)">
-          <option value="triangle" selected>triangle</option>
-          <option value="sine">sine</option>
-          <option value="square">square</option>
-          <option value="sawtooth">sawtooth</option>
-        </select>
-      </div>
-      <div class="row">
-        <label>FM Depth</label>
-        <input type="range" min="0" max="500" value="0" oninput="p('fm_depth_manual',this.value);this.nextElementSibling.textContent=this.value">
-        <span class="v">0</span>
-      </div>
-      <div class="row">
-        <label>Mod Ratio</label>
-        <input type="range" min="0.1" max="4.0" step="0.1" value="1.0" oninput="p('mod_ratio',this.value);this.nextElementSibling.textContent=(+this.value).toFixed(1)">
-        <span class="v">1.0</span>
-      </div>
-    </div>
-  </div>
-
-  <!-- Synth Graph (read-only) -->
-  <div class="sec">
-    <div class="t">Synth Patch Graph</div>
-    <canvas id="gcanvas" width="600" height="95"></canvas>
-  </div>
-
-  <!-- 2-col: Sensor + Audio -->
-  <div class="grid2">
-    <div class="sec">
-      <div class="t">Sensor Monitor</div>
-      <div id="sg">
-        <div class="sv"><div class="l">Dist mm</div><div class="n" id="vD">--</div></div>
-        <div class="sv"><div class="l">Note</div><div class="n" id="vN">--</div></div>
-        <div class="sv"><div class="l">Freq Hz</div><div class="n" id="vF">--</div></div>
-        <div class="sv"><div class="l">FM depth</div><div class="n" id="vFM">--</div></div>
-      </div>
-      <canvas id="hcanvas" width="300" height="60"></canvas>
-      <div class="accel-row">
-        <div class="sv"><div class="l">AX</div><div class="n" id="vAX">--</div></div>
-        <div class="sv"><div class="l">AY</div><div class="n" id="vAY">--</div></div>
-        <div class="sv"><div class="l">AZ</div><div class="n" id="vAZ">--</div></div>
-      </div>
-    </div>
-    <div class="sec">
-      <div class="t">Audio Monitor</div>
-      <canvas id="ocanvas" width="300" height="90"></canvas>
-      <canvas id="lcanvas" width="300" height="40" style="margin-top:4px"></canvas>
-    </div>
-  </div>
-
-  <!-- 2-col: Envelope + Mapping -->
-  <div class="grid2">
-    <div class="sec">
-      <div class="t">Envelope AR</div>
-      <div class="row"><label>Attack ms</label><input type="range" min="1" max="2000" value="10" oninput="p('attack',this.value);this.nextElementSibling.textContent=this.value"><span class="v">10</span></div>
-      <div class="row"><label>Release ms</label><input type="range" min="10" max="5000" value="200" oninput="p('release',this.value);this.nextElementSibling.textContent=this.value"><span class="v">200</span></div>
-    </div>
-    <div class="sec">
-      <div class="t">Sensor Mapping</div>
-      <div class="row"><label>Dist Min mm</label><input type="range" min="0" max="500" value="20" oninput="p('dist_min',this.value);this.nextElementSibling.textContent=this.value;_distMin=+this.value"><span class="v">20</span></div>
-      <div class="row"><label>Dist Max mm</label><input type="range" min="100" max="2000" value="900" oninput="p('dist_max',this.value);this.nextElementSibling.textContent=this.value;_distMax=+this.value"><span class="v">900</span></div>
-      <div class="row"><label>Note Min</label><input type="range" min="24" max="72" value="36" oninput="p('midi_min',this.value);this.nextElementSibling.textContent=this.value"><span class="v">36</span></div>
-      <div class="row"><label>Note Max</label><input type="range" min="36" max="96" value="84" oninput="p('midi_max',this.value);this.nextElementSibling.textContent=this.value"><span class="v">84</span></div>
-      <div class="row"><label>Accel Scale</label><input type="range" min="50" max="2000" value="500" oninput="p('accel_scale',this.value);this.nextElementSibling.textContent=this.value"><span class="v">500</span></div>
-    </div>
-  </div>
-
-  <!-- Serial Monitor -->
-  <div class="sec">
-    <div class="t">Serial Monitor</div>
-    <div id="mon"></div>
-  </div>
-
-  <!-- Test Mode -->
-  <div class="sec">
-    <div class="t">Test Mode (no hardware)</div>
-    <div class="r2" style="margin-bottom:6px">
-      <button id="bTCon" onclick="testConnect()">Test Connect</button>
-      <button id="bTDis" onclick="testDisconnect()" disabled>Test Stop</button>
-      <button id="bTLoop" onclick="testToggleLoop()" disabled>Loop</button>
-      <button onclick="testSendOnce()" id="bTSend" disabled>Send Once</button>
-    </div>
-    <div class="row">
-      <label>Dist mm</label>
-      <input type="range" id="tD" min="20" max="900" value="450" oninput="this.nextElementSibling.textContent=this.value">
-      <span class="v">450</span>
-    </div>
-    <div class="row">
-      <label>AX</label>
-      <input type="range" id="tAX" min="-1000" max="1000" value="0" oninput="this.nextElementSibling.textContent=this.value">
-      <span class="v">0</span>
-    </div>
-    <div class="row">
-      <label>AY</label>
-      <input type="range" id="tAY" min="-1000" max="1000" value="0" oninput="this.nextElementSibling.textContent=this.value">
-      <span class="v">0</span>
-    </div>
-    <div class="row">
-      <label>AZ</label>
-      <input type="range" id="tAZ" min="-1000" max="1000" value="0" oninput="this.nextElementSibling.textContent=this.value">
-      <span class="v">0</span>
-    </div>
+<!-- ── Header Bar ── -->
+<div id="header">
+  <button id="btn-connect">Connect</button>
+  <button id="btn-disconnect">Disconnect</button>
+  <button id="btn-init-audio">Init Audio</button>
+  <span>Status:</span>
+  <span id="serial-status">●</span>
+  <div id="header-spacer"></div>
+  <div id="note-info">
+    <span>Note: <span id="note-display">--</span></span>
+    <span><span id="freq-display">--</span></span>
+    <span><span id="dist-display">--</span></span>
   </div>
 </div>
 
+<div id="main">
+
+  <!-- ── Synth Patch Graph ── -->
+  <div class="sec">
+    <div class="sec-title">Synth Patch Graph</div>
+    <div id="patch-graph">
+
+      <!-- FM Mod + FM Carrier stacked vertically with arrow -->
+      <div id="fm-group">
+        <!-- FM Mod node -->
+        <div class="node fm-mod">
+          <div class="node-title">FM Mod</div>
+          <div class="node-row">
+            <label>Wave</label>
+            <select data-param="fm_mod:waveform">
+              <option value="triangle" selected>triangle</option>
+              <option value="sine">sine</option>
+              <option value="square">square</option>
+              <option value="sawtooth">sawtooth</option>
+            </select>
+          </div>
+          <div class="node-row">
+            <label>Freq</label>
+            <input type="range" min="20" max="2000" value="220" data-param="fm_mod:freq">
+            <span class="nv">220</span>
+          </div>
+          <div class="node-row">
+            <label>Amp</label>
+            <input type="range" min="0" max="500" value="50" data-param="fm_mod:amp">
+            <span class="nv">50</span>
+          </div>
+        </div>
+
+        <!-- Vertical FM arrow -->
+        <div id="fm-arrow-vert">│<br>FM<br>▼</div>
+
+        <!-- FM Carrier node -->
+        <div class="node fm-carrier">
+          <div class="node-title">FM Carrier</div>
+          <div class="node-row">
+            <label>Wave</label>
+            <select data-param="fm_carrier:waveform">
+              <option value="triangle" selected>triangle</option>
+              <option value="sine">sine</option>
+              <option value="square">square</option>
+              <option value="sawtooth">sawtooth</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Arrow: Carrier → Mixer -->
+      <div class="node-arrow">→</div>
+
+      <!-- Mixer node -->
+      <div class="node mixer">
+        <div class="node-title">Mixer</div>
+        <div class="node-row">
+          <label>Gain</label>
+          <input type="range" min="0" max="2" step="0.01" value="1" data-param="mixer:gain">
+          <span class="nv">1.0</span>
+        </div>
+      </div>
+
+      <!-- Arrow: Mixer → Filter -->
+      <div class="node-arrow">→</div>
+
+      <!-- Filter node -->
+      <div class="node filter">
+        <div class="node-title">Filter</div>
+        <div class="node-row">
+          <label>Type</label>
+          <select data-param="filter:filter_type">
+            <option value="lowpass" selected>lowpass</option>
+            <option value="highpass">highpass</option>
+            <option value="bandpass">bandpass</option>
+            <option value="notch">notch</option>
+          </select>
+        </div>
+        <div class="node-row">
+          <label>Cutoff</label>
+          <input type="range" min="20" max="20000" value="800" data-param="filter:cutoff">
+          <span class="nv">800</span>
+        </div>
+        <div class="node-row">
+          <label>Q</label>
+          <input type="range" min="0.1" max="20" step="0.1" value="1.2" data-param="filter:q">
+          <span class="nv">1.2</span>
+        </div>
+      </div>
+
+      <!-- Arrow: Filter → Master -->
+      <div class="node-arrow">→</div>
+
+      <!-- Master node -->
+      <div class="node master">
+        <div class="node-title">Master</div>
+        <div class="node-row">
+          <label>Gain</label>
+          <input type="range" min="0" max="1" step="0.01" value="0.4" data-param="master:gain">
+          <span class="nv">0.4</span>
+        </div>
+      </div>
+
+      <!-- Output indicator -->
+      <div class="node-arrow">→ ♪</div>
+
+    </div>
+  </div>
+
+  <!-- ── Mid Panel ── -->
+  <div id="mid-panel">
+
+    <!-- Left: Sensor Mapping Curves -->
+    <div class="sec">
+      <div class="sec-title">Sensor Mapping</div>
+
+      <div class="curve-label">Dist → Pitch</div>
+      <div class="curve-buttons" data-curve-target="dist">
+        <button data-curve="linear" class="active">Lin</button>
+        <button data-curve="log">Log</button>
+        <button data-curve="exp">Exp</button>
+        <button data-curve="s_curve">S</button>
+      </div>
+      <canvas class="curve-canvas" id="dist-curve-canvas" width="200" height="50"></canvas>
+
+      <div class="curve-label">Accel → FM Depth</div>
+      <div class="curve-buttons" data-curve-target="accel">
+        <button data-curve="linear" class="active">Lin</button>
+        <button data-curve="log">Log</button>
+        <button data-curve="exp">Exp</button>
+        <button data-curve="s_curve">S</button>
+      </div>
+      <canvas class="curve-canvas" id="accel-curve-canvas" width="200" height="50"></canvas>
+    </div>
+
+    <!-- Right: Transport -->
+    <div class="sec">
+      <div class="sec-title">Transport</div>
+
+      <!-- Presets -->
+      <div id="presets" class="btn-group">
+        <button data-preset="otamatone" class="active">Otamatone</button>
+        <button data-preset="clean">Clean</button>
+        <button data-preset="acid">Acid</button>
+        <button data-preset="retro">Retro</button>
+      </div>
+
+      <!-- Scale -->
+      <div id="scale-select" class="btn-group">
+        <button data-scale="pentatonic" class="active">Penta</button>
+        <button data-scale="major">Major</button>
+        <button data-scale="minor">Minor</button>
+        <button data-scale="chromatic">Chrom</button>
+      </div>
+
+      <!-- Octave -->
+      <div id="oct-display">
+        <label>Oct</label>
+        <button id="oct-down">◀</button>
+        <div class="oct-dots">
+          <div class="oct-dot" id="oct-dot-0"></div>
+          <div class="oct-dot" id="oct-dot-1"></div>
+          <div class="oct-dot active" id="oct-dot-2"></div>
+          <div class="oct-dot" id="oct-dot-3"></div>
+          <div class="oct-dot" id="oct-dot-4"></div>
+        </div>
+        <button id="oct-up">▶</button>
+      </div>
+
+      <!-- Glide, Attack, Release sliders -->
+      <div class="ctrl-row">
+        <label>Glide</label>
+        <input type="range" id="glide" min="10" max="2000" value="300">
+        <span class="cv" id="glide-val">300ms</span>
+      </div>
+      <div class="ctrl-row">
+        <label>Attack</label>
+        <input type="range" id="attack" min="1" max="2000" value="10">
+        <span class="cv" id="attack-val">10ms</span>
+      </div>
+      <div class="ctrl-row">
+        <label>Release</label>
+        <input type="range" id="release" min="10" max="5000" value="200">
+        <span class="cv" id="release-val">200ms</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── Audio Monitor ── -->
+  <div class="sec">
+    <div class="sec-title">Audio Monitor</div>
+    <div id="audio-monitor">
+      <canvas id="oscilloscope" width="800" height="80"></canvas>
+      <canvas id="level-meter" width="200" height="80"></canvas>
+    </div>
+  </div>
+
+  <!-- ── Serial Monitor (collapsible) ── -->
+  <details>
+    <summary>Serial Monitor</summary>
+    <div class="details-body">
+      <div id="serial-monitor"></div>
+    </div>
+  </details>
+
+  <!-- ── Test Mode (collapsible) ── -->
+  <details>
+    <summary>Test Mode (no hardware)</summary>
+    <div class="details-body">
+      <div class="btn-group" style="margin-bottom:8px">
+        <button id="test-send">Send Frame</button>
+      </div>
+      <div class="ctrl-row">
+        <label>Dist mm</label>
+        <input type="range" id="test-dist" min="20" max="900" value="450">
+        <span class="cv" id="test-dist-val">450</span>
+      </div>
+      <div class="ctrl-row">
+        <label>AX</label>
+        <input type="range" id="test-ax" min="-1000" max="1000" value="0">
+        <span class="cv" id="test-ax-val">0</span>
+      </div>
+      <div class="ctrl-row">
+        <label>AY</label>
+        <input type="range" id="test-ay" min="-1000" max="1000" value="0">
+        <span class="cv" id="test-ay-val">0</span>
+      </div>
+      <div class="ctrl-row">
+        <label>AZ</label>
+        <input type="range" id="test-az" min="-1000" max="1000" value="0">
+        <span class="cv" id="test-az-val">0</span>
+      </div>
+    </div>
+  </details>
+
+</div><!-- /#main -->
+
+<!-- ── ruby.wasm ── -->
 <script src="https://cdn.jsdelivr.net/npm/@ruby/4.0-wasm-wasi@2.8.1/dist/browser.script.iife.js"></script>
-<script type="text/ruby" src="src/ruby/synth_patch/audio_adapter.rb?v=20260329c"></script>
-<script type="text/ruby" src="src/ruby/synth_patch/node.rb?v=20260329c"></script>
-<script type="text/ruby" src="src/ruby/synth_patch/osc_node.rb?v=20260329c"></script>
-<script type="text/ruby" src="src/ruby/synth_patch/fm_op_node.rb?v=20260329c"></script>
-<script type="text/ruby" src="src/ruby/synth_patch/filter_node.rb?v=20260329c"></script>
-<script type="text/ruby" src="src/ruby/synth_patch/gain_node.rb?v=20260329c"></script>
-<script type="text/ruby" src="src/ruby/synth_patch/mixer_node.rb?v=20260329c"></script>
-<script type="text/ruby" src="src/ruby/synth_patch/synth_patch.rb?v=20260329c"></script>
-<script type="text/ruby" src="src/ruby/synth_patch/web_adapter.rb?v=20260329c"></script>
-<script type="text/ruby" src="src/ruby/serial.rb?v=20260329c"></script>
-<script type="text/ruby" src="src/ruby/sensor_mapper.rb?v=20260329c"></script>
-<script type="text/ruby" src="src/ruby/preset_manager.rb?v=20260329c"></script>
-<script type="text/ruby" src="src/ruby/main.rb?v=20260329c"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/audio_adapter.rb?v=20260329d"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/node.rb?v=20260329d"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/osc_node.rb?v=20260329d"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/fm_op_node.rb?v=20260329d"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/filter_node.rb?v=20260329d"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/gain_node.rb?v=20260329d"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/mixer_node.rb?v=20260329d"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/synth_patch.rb?v=20260329d"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/web_adapter.rb?v=20260329d"></script>
+<script type="text/ruby" src="src/ruby/serial.rb?v=20260329d"></script>
+<script type="text/ruby" src="src/ruby/sensor_mapper.rb?v=20260329d"></script>
+<script type="text/ruby" src="src/ruby/preset_manager.rb?v=20260329d"></script>
+<script type="text/ruby" src="src/ruby/ui_controller.rb?v=20260329d"></script>
+<script type="text/ruby" src="src/ruby/main.rb?v=20260329d"></script>
 
 <script>
 // ============================================================
-// Global audio state
+// Web Serial — async API kept in JS
 // ============================================================
-let audioContext;
-// analyser and analyserData are set by Ruby WebAdapter via JS.global[:analyser]
-// Access as window.analyser / window.analyserData from draw functions
-let analyser, analyserData;
-window.synthMasterGain    = 0.4;
-window.fmDepthScale       = 400;
-window.synthGlideTime     = 0.3;
-window.synthFmDepthManual = 0;
-window.synthModRatio      = 1.0;
+let serialPort = null;
+let serialReader = null;
 
-const sp = { nodes: {}, outputId: null, pitchIds: [], modIds: [], spec: null, _pending: null };
-let _prevActive = false;
+document.getElementById('btn-connect').addEventListener('click', async () => {
+  try {
+    serialPort = await navigator.serial.requestPort();
+    await serialPort.open({ baudRate: 115200 });
+    const decoder = new TextDecoderStream();
+    serialPort.readable.pipeTo(decoder.writable).catch(e => {
+      console.error('[Serial pipeTo]', e);
+      appendSerialMonitor('[PIPE ERR] ' + e.message);
+    });
+    serialReader = decoder.readable.getReader();
+    if (window.rubySerialOnConnect) window.rubySerialOnConnect(115200);
+    document.getElementById('serial-status').textContent = '●';
+    document.getElementById('serial-status').style.color = '#4caf50';
+    readLoop();
+  } catch (e) { console.error('Serial:', e); }
+});
 
-// ============================================================
-// Preset waveform defaults (for syncing dropdowns on preset switch)
-// ============================================================
-const PRESET_WAVES = {
-  otamatone: { carrier: 'triangle', mod: 'triangle' },
-  clean:     { carrier: 'sine',     mod: 'sine' },
-  acid:      { carrier: 'sawtooth', mod: 'sine' },
-  retro:     { carrier: 'square',   mod: 'square' }
-};
+document.getElementById('btn-disconnect').addEventListener('click', async () => {
+  try {
+    if (serialReader) { await serialReader.cancel(); serialReader = null; }
+    if (serialPort)   { await serialPort.close();   serialPort   = null; }
+    if (window.rubySerialOnDisconnect) window.rubySerialOnDisconnect();
+    document.getElementById('serial-status').textContent = '●';
+    document.getElementById('serial-status').style.color = '#f44336';
+  } catch (e) { console.error('Serial disconnect:', e); }
+});
 
-function setPreset(name, btn) {
-  document.querySelectorAll('[id^="p_"]').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  p('preset', name);
-  const w = PRESET_WAVES[name];
-  if (w) {
-    document.getElementById('sel_carrier').value = w.carrier;
-    document.getElementById('sel_mod').value     = w.mod;
-  }
-}
-
-// ============================================================
-// Synth graph layout (read-only visualization)
-// ============================================================
-const NW = 108, NH = 34;
-const COLS   = [10, 128, 246, 364, 482];
-const ROW_Y  = [8, 52];
-const GNODES = [
-  { id:'fm_mod',     label:'FM Mod',    row:0, col:0, color:'#2255aa' },
-  { id:'fm_carrier', label:'FM Carrier',row:1, col:0, color:'#2255aa' },
-  { id:'mixer',      label:'Mixer',     row:1, col:1, color:'#553388' },
-  { id:'filter',     label:'Filter',    row:1, col:2, color:'#885522' },
-  { id:'master',     label:'Master',    row:1, col:3, color:'#225533' },
-];
-
-function nodePos(gn) {
-  return { x: COLS[gn.col], y: ROW_Y[gn.row], w: NW, h: NH };
-}
-
-function drawSynthGraph() {
-  const c = document.getElementById('gcanvas');
-  if (!c) return;
-  const ctx = c.getContext('2d');
-  const W = c.width, H = c.height;
-  ctx.fillStyle = '#0a0a0a'; ctx.fillRect(0, 0, W, H);
-
-  if (!sp.spec) {
-    ctx.fillStyle = '#333'; ctx.font = '11px monospace'; ctx.textAlign = 'center';
-    ctx.fillText('Init Audio to build synth patch graph', W / 2, H / 2 + 4);
-    return;
-  }
-
-  // FM arrow (mod → carrier, vertical dashed)
-  const fmMod = nodePos(GNODES[0]), fmCar = nodePos(GNODES[1]);
-  const ax = fmMod.x + fmMod.w / 2, ay1 = fmMod.y + fmMod.h, ay2 = fmCar.y;
-  ctx.strokeStyle = '#6644cc'; ctx.lineWidth = 1.5; ctx.setLineDash([4, 3]);
-  ctx.beginPath(); ctx.moveTo(ax, ay1); ctx.lineTo(ax, ay2); ctx.stroke();
-  ctx.setLineDash([]);
-  ctx.fillStyle = '#6644cc';
-  ctx.beginPath(); ctx.moveTo(ax, ay2); ctx.lineTo(ax-4, ay2-7); ctx.lineTo(ax+4, ay2-7); ctx.fill();
-  ctx.font = '8px monospace'; ctx.textAlign = 'center';
-  ctx.fillText('FM', ax + 14, (ay1 + ay2) / 2 + 3);
-
-  // Main chain arrows
-  const chain = [GNODES[1], GNODES[2], GNODES[3], GNODES[4]];
-  for (let i = 0; i < chain.length - 1; i++) {
-    const a = nodePos(chain[i]), b = nodePos(chain[i + 1]);
-    const x1 = a.x + a.w, y1 = a.y + a.h / 2, x2 = b.x, y2 = b.y + b.h / 2;
-    ctx.strokeStyle = '#2a6a2a'; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
-    ctx.fillStyle = '#2a6a2a';
-    ctx.beginPath(); ctx.moveTo(x2, y2); ctx.lineTo(x2-7, y2-4); ctx.lineTo(x2-7, y2+4); ctx.fill();
-  }
-  const last = nodePos(GNODES[4]);
-  const ox = last.x + last.w + 10, oy = last.y + last.h / 2;
-  ctx.strokeStyle = '#0f0'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(ox + 16, oy); ctx.stroke();
-  ctx.fillStyle = '#0f0'; ctx.font = '16px monospace'; ctx.textAlign = 'left';
-  ctx.fillText('🔊', ox + 10, oy + 5);
-
-  GNODES.forEach(gn => {
-    const { x, y, w, h } = nodePos(gn);
-    const nd = sp.spec ? sp.spec.nodes.find(n => n.id === gn.id) : null;
-    ctx.fillStyle = '#111'; ctx.strokeStyle = gn.color; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.rect(x, y, w, h); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = '#ccc'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
-    ctx.fillText(gn.label, x + w / 2, y + 13);
-    if (nd) {
-      ctx.fillStyle = '#777'; ctx.font = '9px monospace';
-      const p = nd.params;
-      let summary = '';
-      if (nd.type === 'fm_op' || nd.type === 'oscillator') summary = p.waveform || 'sine';
-      else if (nd.type === 'filter') summary = `${(p.filter_type||'lp').substring(0,2).toUpperCase()} ${p.cutoff||800}Hz`;
-      else if (nd.type === 'gain') summary = `gain:${(+p.gain).toFixed(2)}`;
-      ctx.fillText(summary, x + w / 2, y + 26);
+async function readLoop() {
+  while (serialReader) {
+    try {
+      const { value, done } = await serialReader.read();
+      if (done) { appendSerialMonitor('[DISCONNECT] stream ended'); break; }
+      if (value && window.rubySerialOnReceive) window.rubySerialOnReceive(value);
+    } catch (e) {
+      appendSerialMonitor('[ERR] ' + e.message);
+      break;
     }
-  });
+  }
 }
+
+// ============================================================
+// Audio init (requires user gesture)
+// ============================================================
+document.getElementById('btn-init-audio').addEventListener('click', () => {
+  if (window.rubyInitAudio) {
+    window.rubyInitAudio();
+    document.getElementById('btn-init-audio').textContent = 'Audio Ready';
+    document.getElementById('btn-init-audio').style.borderColor = '#4caf50';
+    document.getElementById('btn-init-audio').style.color = '#4caf50';
+  }
+});
 
 // ============================================================
 // SynthPatch: build Web Audio graph from Ruby JSON spec
 // ============================================================
+let audioContext;
+let analyser, analyserData;
+const sp = { nodes: {}, outputId: null, pitchIds: [], modIds: [], spec: null };
+let _prevActive = false;
+
 function ensureAnalyser(outputNode) {
   if (!analyser) {
     analyser = audioContext.createAnalyser();
     analyser.fftSize = 2048;
     analyser.smoothingTimeConstant = 0.6;
     analyserData = new Float32Array(analyser.fftSize);
+    window.analyser = analyser;
+    window.analyserData = analyserData;
   }
   outputNode.connect(analyser);
   analyser.connect(audioContext.destination);
 }
 
-window.synthPatchBuild = function (json) {
-  if (!audioContext) { sp._pending = json; return; }
+window.synthPatchBuild = function(json) {
+  if (!audioContext) {
+    audioContext = new AudioContext();
+  }
   Object.values(sp.nodes).forEach(n => { try { n.disconnect(); } catch (_) {} });
-  if (analyser) { try { analyser.disconnect(); } catch (_) {} analyser = null; }
+  if (analyser) { try { analyser.disconnect(); } catch (_) {} analyser = null; window.analyser = null; }
   sp.nodes = {}; sp.outputId = null; sp.pitchIds = []; sp.modIds = [];
 
   const s = JSON.parse(json);
@@ -402,12 +755,10 @@ window.synthPatchBuild = function (json) {
       const o = sp.nodes[n.id]; if (o) try { o.start(); } catch (_) {}
     }
   });
-
-  drawSynthGraph();
   console.log('[SynthPatch] built:', s.nodes.map(n => n.id).join(', '));
 };
 
-window.synthPatchUpdateParam = function (name, param, val) {
+window.synthPatchUpdateParam = function(name, param, val) {
   const n = sp.nodes[name] || sp.nodes['_amp_' + name];
   if (!n) return;
   const pm = { frequency:'frequency', cutoff:'frequency', gain:'gain', q:'Q', waveform:'type', filter_type:'type', amplitude:'gain' };
@@ -417,8 +768,8 @@ window.synthPatchUpdateParam = function (name, param, val) {
   if (name === sp.outputId && param === 'gain') window.synthMasterGain = +val;
 };
 
-// Theremin-style sensor-driven update with glide, mod_ratio, manual FM depth
-window.updateSensorParams = function (freq, fmDepth, active) {
+// Theremin-style sensor-driven update
+window.updateSensorParams = function(freq, fmDepth, active) {
   if (!audioContext || !sp.outputId) return;
   const now   = audioContext.currentTime;
   const T     = window.synthGlideTime != null ? window.synthGlideTime : 0.3;
@@ -436,293 +787,141 @@ window.updateSensorParams = function (freq, fmDepth, active) {
 
   const manualDepth = window.synthFmDepthManual != null ? window.synthFmDepthManual : 0;
   const fmAmp = sp.nodes['_amp_fm_mod'];
-  if (fmAmp?.gain) fmAmp.gain.setTargetAtTime(fmDepth * window.fmDepthScale + manualDepth, now, 0.05);
+  const depthScale = window.fmDepthScale != null ? window.fmDepthScale : 400;
+  if (fmAmp?.gain) fmAmp.gain.setTargetAtTime(fmDepth * depthScale + manualDepth, now, 0.05);
 
   const out = sp.nodes[sp.outputId];
-  if (out?.gain) out.gain.setTargetAtTime(on ? window.synthMasterGain : 0, now, on !== _prevActive ? 0.01 : T);
+  if (out?.gain) out.gain.setTargetAtTime(on ? (window.synthMasterGain || 0.4) : 0, now, on !== _prevActive ? 0.01 : T);
   _prevActive = on;
 };
 
-// ============================================================
-// Sensor history
-// ============================================================
-const HIST_LEN = 120;
-const distHistory = new Array(HIST_LEN).fill(0);
-let _lastAx = 0, _lastAy = 0, _lastAz = 0;
-let _distMin = 20, _distMax = 900;
-
-function pushDistHistory(val) {
-  distHistory.push(+val);
-  if (distHistory.length > HIST_LEN) distHistory.shift();
-}
-
-function drawSensorHistory() {
-  const c = document.getElementById('hcanvas');
-  if (!c) return;
-  const ctx = c.getContext('2d');
-  const W = c.width, H = c.height;
-  ctx.fillStyle = '#080808'; ctx.fillRect(0, 0, W, H);
-  ctx.strokeStyle = '#161616'; ctx.lineWidth = 1;
-  [0.25, 0.5, 0.75].forEach(t => {
-    ctx.beginPath(); ctx.moveTo(0, t * (H - 16)); ctx.lineTo(W, t * (H - 16)); ctx.stroke();
-  });
-  const chartH = H - 18;
-  ctx.strokeStyle = '#00ccee'; ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  distHistory.forEach((v, i) => {
-    const x = i / (HIST_LEN - 1) * W;
-    const y = chartH - (Math.max(0, v - _distMin) / Math.max(1, _distMax - _distMin)) * chartH;
-    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-  });
-  ctx.stroke();
-  ctx.fillStyle = '#335555'; ctx.font = '9px monospace'; ctx.textAlign = 'right';
-  ctx.fillText(_distMax + 'mm', W - 2, 10);
-  ctx.fillText(_distMin + 'mm', W - 2, chartH - 2);
-}
-
-// ============================================================
-// Oscilloscope
-// ============================================================
-function findZeroCrossing(buf, start) {
-  for (let i = start; i < start + 512 && i < buf.length - 1; i++) {
-    if (buf[i] <= 0 && buf[i + 1] > 0) return i;
-  }
-  return start;
-}
-
-function drawOscilloscope() {
-  const c = document.getElementById('ocanvas');
-  if (!c) return;
-  const ctx = c.getContext('2d');
-  const W = c.width, H = c.height;
-  ctx.fillStyle = '#060606'; ctx.fillRect(0, 0, W, H);
-  ctx.strokeStyle = '#131313'; ctx.lineWidth = 1; ctx.setLineDash([2, 4]);
-  [0.25, 0.5, 0.75].forEach(t => {
-    ctx.beginPath(); ctx.moveTo(0, t * H); ctx.lineTo(W, t * H); ctx.stroke();
-  });
-  ctx.setLineDash([]);
-  ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke();
-  const _analyser = window.analyser || analyser;
-  const _analyserData = window.analyserData || analyserData;
-  if (!_analyser) {
-    ctx.fillStyle = '#2a2a2a'; ctx.font = '11px monospace'; ctx.textAlign = 'center';
-    ctx.fillText('Init Audio to enable oscilloscope', W / 2, H / 2 + 4);
-    return;
-  }
-  _analyser.getFloatTimeDomainData(_analyserData);
-  const offset = findZeroCrossing(_analyserData, 100);
-  const samples = Math.min(_analyserData.length - offset, W);
-  ctx.strokeStyle = '#00ee66'; ctx.lineWidth = 1.5;
-  ctx.shadowColor = '#00ff55'; ctx.shadowBlur = 4;
-  ctx.beginPath();
-  for (let i = 0; i < samples; i++) {
-    const x = i / samples * W;
-    const y = (1 - (_analyserData[offset + i] + 1) / 2) * H;
-    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-  }
-  ctx.stroke();
-  ctx.shadowBlur = 0;
-  ctx.fillStyle = '#2a4a2a'; ctx.font = '9px monospace'; ctx.textAlign = 'left';
-  ctx.fillText('OSC', 4, 11);
-}
-
-// ============================================================
-// Level meter
-// ============================================================
-let peakLevel = 0, peakHoldFrames = 0;
-
-function drawLevelMeter() {
-  const c = document.getElementById('lcanvas');
-  if (!c) return;
-  const ctx = c.getContext('2d');
-  const W = c.width, H = c.height;
-  ctx.fillStyle = '#060606'; ctx.fillRect(0, 0, W, H);
-  const _analyserLm = window.analyser || analyser;
-  const _analyserDataLm = window.analyserData || analyserData;
-  if (!_analyserLm || !_analyserDataLm) return;
-  _analyserLm.getFloatTimeDomainData(_analyserDataLm);
-  let sum = 0;
-  for (let i = 0; i < _analyserDataLm.length; i++) sum += _analyserDataLm[i] * _analyserDataLm[i];
-  const rms = Math.sqrt(sum / _analyserDataLm.length);
-  const dbFS = rms > 1e-6 ? 20 * Math.log10(rms) : -80;
-  const norm = Math.max(0, Math.min(1, (dbFS + 60) / 60));
-  if (norm > peakLevel) { peakLevel = norm; peakHoldFrames = 40; }
-  else if (peakHoldFrames > 0) peakHoldFrames--;
-  else peakLevel = Math.max(0, peakLevel - 0.005);
-  const barH = H - 18;
-  const hue = norm > 0.85 ? 0 : norm > 0.65 ? 35 : 110;
-  ctx.fillStyle = `hsl(${hue},75%,32%)`;
-  ctx.fillRect(0, 0, W * norm, barH);
-  ctx.fillStyle = `hsl(${peakLevel > 0.85 ? 0 : 80},80%,55%)`;
-  ctx.fillRect(W * peakLevel - 2, 0, 2, barH);
-  const marks = [[-60,'#222'],[-40,'#282828'],[-20,'#2e2e2e'],[-12,'#333'],[-6,'#383838'],[0,'#3a3a3a']];
-  marks.forEach(([db, lc]) => {
-    const x = (db + 60) / 60 * W;
-    ctx.fillStyle = lc; ctx.fillRect(x, 0, 1, barH);
-    ctx.fillStyle = '#444'; ctx.font = '8px monospace'; ctx.textAlign = 'center';
-    ctx.fillText(db + 'dB', x, H - 2);
-  });
-  ctx.fillStyle = '#666'; ctx.font = '9px monospace'; ctx.textAlign = 'left';
-  ctx.fillText(dbFS.toFixed(1) + 'dB', 4, H - 5);
-}
-
-// ============================================================
-// Animation loop
-// ============================================================
-function vizLoop() {
-  requestAnimationFrame(vizLoop);
-  drawOscilloscope();
-  drawLevelMeter();
-}
-vizLoop();
+// Init state
+window.synthMasterGain    = 0.4;
+window.fmDepthScale       = 400;
+window.synthGlideTime     = 0.3;
+window.synthFmDepthManual = 0;
+window.synthModRatio      = 1.0;
 
 // ============================================================
 // UI callbacks (called from Ruby)
 // ============================================================
-window.updateSensorDisplay = function (d, ax, ay, az, f, fm, note) {
-  _lastAx = +ax; _lastAy = +ay; _lastAz = +az;
-  pushDistHistory(+d);
-  drawSensorHistory();
-  document.getElementById('vD').textContent  = d;
-  document.getElementById('vN').textContent  = note || '--';
-  document.getElementById('vF').textContent  = f;
-  document.getElementById('vFM').textContent = (+fm * 100).toFixed(0) + '%';
-  document.getElementById('vAX').textContent = ax;
-  document.getElementById('vAY').textContent = ay;
-  document.getElementById('vAZ').textContent = az;
+window.updateSensorDisplay = function(d, ax, ay, az, f, fm, note) {
+  const nd = document.getElementById('note-display');
+  const fd = document.getElementById('freq-display');
+  const dd = document.getElementById('dist-display');
+  if (nd) nd.textContent = note || '--';
+  if (fd) fd.textContent = f + 'Hz';
+  if (dd) dd.textContent = d + 'mm';
 };
 
-window.updateSerialStatus = function (msg, errCount) {
-  const e = document.getElementById('sst');
-  e.textContent = msg;
-  e.className = msg.includes('connected at') ? 'st' : 'st e';
-  document.getElementById('bCon').disabled = msg.includes('connected at');
-  document.getElementById('bDis').disabled = !msg.includes('connected at');
-  if (errCount != null) document.getElementById('serr').textContent = errCount;
+window.updateSerialStatus = function(msg, errCount) {
+  const connected = msg.includes('connected at');
+  document.getElementById('serial-status').textContent = '●';
+  document.getElementById('serial-status').style.color = connected ? '#4caf50' : '#f44336';
 };
 
-window.updateSerialMonitor = function (line) {
-  const e = document.getElementById('mon');
+window.updateSerialMonitor = function(line) {
+  appendSerialMonitor(line);
+};
+
+function appendSerialMonitor(line) {
+  const e = document.getElementById('serial-monitor');
+  if (!e) return;
   e.textContent = (line + '\n' + e.textContent).substring(0, 2000);
-};
-
-// ============================================================
-// Web Serial
-// ============================================================
-let _port, _reader;
-
-async function serialConnect() {
-  try {
-    _port = await navigator.serial.requestPort();
-    const baud = +document.getElementById('baud').value;
-    await _port.open({ baudRate: baud });
-    const dec = new TextDecoderStream();
-    _port.readable.pipeTo(dec.writable).catch(e => {
-      console.error('[Serial pipeTo]', e);
-      if (window.updateSerialMonitor) window.updateSerialMonitor('[PIPE ERR] ' + e.message);
-    });
-    _reader = dec.readable.getReader();
-    if (window.rubySerialOnConnect) window.rubySerialOnConnect(baud);
-    (async () => {
-      try {
-        while (_port) {
-          const { value, done } = await _reader.read();
-          if (done) { if (window.updateSerialMonitor) window.updateSerialMonitor('[DISCONNECT] stream ended (done)'); break; }
-          if (value && window.rubySerialOnReceive) window.rubySerialOnReceive(value);
-        }
-      } catch (e) {
-        console.error('[Serial]', e);
-        if (window.updateSerialMonitor) window.updateSerialMonitor('[DISCONNECT ERR] ' + e.message);
-      }
-      finally {
-        const ts = new Date().toLocaleTimeString();
-        if (window.updateSerialMonitor) window.updateSerialMonitor('[DISCONNECT] at ' + ts);
-        _port = null; if (window.rubySerialOnDisconnect) window.rubySerialOnDisconnect();
-      }
-    })();
-  } catch (e) {
-    document.getElementById('sst').textContent = e.message;
-    document.getElementById('sst').className = 'st e';
-  }
-}
-
-async function serialDisconnect() {
-  if (_reader) { try { await _reader.cancel(); } catch (_) {} }
-  if (_port)   { try { await _port.close();    } catch (_) {} _port = null; }
-  if (window.rubySerialOnDisconnect) window.rubySerialOnDisconnect();
 }
 
 // ============================================================
-// Audio init (requires user gesture)
+// UI event bridge
 // ============================================================
-async function initAudio() {
-  // rubyInitAudio registered by Ruby after ruby.wasm loads
-  if (window.rubyInitAudio) {
-    window.rubyInitAudio();
-  } else {
-    // Fallback: resume context only (Ruby not ready yet)
-    audioContext = audioContext || new AudioContext();
-    if (audioContext.state === 'suspended') await audioContext.resume();
-    document.getElementById('ast').textContent = 'waiting for Ruby...';
-  }
-}
 
-// Param dispatch to Ruby
-function p(key, val) { if (window.rubyOnParamUpdate) window.rubyOnParamUpdate(key, +val || val); }
+// Preset buttons
+document.querySelectorAll('#presets button').forEach(btn => {
+  btn.addEventListener('click', e => {
+    document.querySelectorAll('#presets button').forEach(b => b.classList.remove('active'));
+    e.target.classList.add('active');
+    if (window.rubyOnParamUpdate) window.rubyOnParamUpdate('preset', e.target.dataset.preset);
+  });
+});
 
-// Initial placeholder draw
-drawSynthGraph();
-drawSensorHistory();
+// Scale buttons
+document.querySelectorAll('#scale-select button').forEach(btn => {
+  btn.addEventListener('click', e => {
+    document.querySelectorAll('#scale-select button').forEach(b => b.classList.remove('active'));
+    e.target.classList.add('active');
+    if (window.rubyOnParamUpdate) window.rubyOnParamUpdate('scale', e.target.dataset.scale);
+  });
+});
 
-// ============================================================
-// Test Mode (inline sensor emulation, no hardware needed)
-// ============================================================
-let _testLoop = null;
+// Octave
+document.getElementById('oct-up').addEventListener('click', () => {
+  if (window.rubyOnParamUpdate) window.rubyOnParamUpdate('oct_up', '1');
+});
+document.getElementById('oct-down').addEventListener('click', () => {
+  if (window.rubyOnParamUpdate) window.rubyOnParamUpdate('oct_down', '1');
+});
 
-function _testFrame() {
-  const d  = document.getElementById('tD').value;
-  const ax = document.getElementById('tAX').value;
-  const ay = document.getElementById('tAY').value;
-  const az = document.getElementById('tAZ').value;
-  return `<D:${d},AX:${ax},AY:${ay},AZ:${az}>\n`;
-}
+// Glide, Attack, Release sliders
+['glide', 'attack', 'release'].forEach(id => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('input', () => {
+    if (window.rubyOnParamUpdate) window.rubyOnParamUpdate(id, el.value);
+    const span = document.getElementById(id + '-val');
+    if (span) span.textContent = el.value + 'ms';
+  });
+});
 
-function testConnect() {
-  if (_port) return; // real serial takes priority
-  if (window.rubySerialOnConnect) window.rubySerialOnConnect(115200);
-  document.getElementById('bTCon').disabled  = true;
-  document.getElementById('bTDis').disabled  = false;
-  document.getElementById('bTLoop').disabled = false;
-  document.getElementById('bTSend').disabled = false;
-}
+// Curve buttons
+document.querySelectorAll('.curve-buttons button').forEach(btn => {
+  btn.addEventListener('click', e => {
+    const group = e.target.closest('.curve-buttons');
+    group.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+    e.target.classList.add('active');
+    const prefix = group.dataset.curveTarget;
+    if (window.rubyOnParamUpdate) window.rubyOnParamUpdate(prefix + '_curve', e.target.dataset.curve);
+  });
+});
 
-function testDisconnect() {
-  if (_testLoop) { clearInterval(_testLoop); _testLoop = null; }
-  document.getElementById('bTLoop').textContent = 'Loop';
-  document.getElementById('bTCon').disabled  = false;
-  document.getElementById('bTDis').disabled  = true;
-  document.getElementById('bTLoop').disabled = true;
-  document.getElementById('bTSend').disabled = true;
-  if (window.rubySerialOnDisconnect) window.rubySerialOnDisconnect();
-}
+// Node controls — sliders and selects
+document.querySelectorAll('.node input[type="range"], .node select').forEach(el => {
+  const event = el.tagName === 'SELECT' ? 'change' : 'input';
+  el.addEventListener(event, () => {
+    const paramKey = el.dataset.param;
+    if (paramKey && window.rubyOnParamUpdate) window.rubyOnParamUpdate(paramKey, el.value);
+    // Update adjacent value display
+    const row = el.closest('.node-row');
+    if (row && el.type === 'range') {
+      const nv = row.querySelector('.nv');
+      if (nv) nv.textContent = el.value;
+    }
+  });
+});
 
-function testSendOnce() {
-  if (window.rubySerialOnReceive) window.rubySerialOnReceive(_testFrame());
-}
+// Test sliders value display
+['test-dist', 'test-ax', 'test-ay', 'test-az'].forEach(id => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('input', () => {
+    const val = document.getElementById(id + '-val');
+    if (val) val.textContent = el.value;
+  });
+});
 
-function testToggleLoop() {
-  const btn = document.getElementById('bTLoop');
-  if (_testLoop) {
-    clearInterval(_testLoop);
-    _testLoop = null;
-    btn.textContent = 'Loop';
-  } else {
-    _testLoop = setInterval(() => {
-      if (window.rubySerialOnReceive) window.rubySerialOnReceive(_testFrame());
-    }, 50);
-    btn.textContent = 'Stop Loop';
-  }
+// Test Mode — send frame
+const testSendBtn = document.getElementById('test-send');
+if (testSendBtn) {
+  testSendBtn.addEventListener('click', () => {
+    const d  = document.getElementById('test-dist').value;
+    const ax = document.getElementById('test-ax').value;
+    const ay = document.getElementById('test-ay').value;
+    const az = document.getElementById('test-az').value;
+    const dP  = String(d).padStart(4, '0');
+    const axP = String(Math.abs(+ax)).padStart(4, '0');
+    const ayP = String(Math.abs(+ay)).padStart(4, '0');
+    const azP = String(Math.abs(+az)).padStart(4, '0');
+    const frame = '<D:' + dP + ',AX:' + axP + ',AY:' + ayP + ',AZ:' + azP + '>\n';
+    if (window.rubySerialOnReceive) window.rubySerialOnReceive(frame);
+  });
 }
 
 </script>
