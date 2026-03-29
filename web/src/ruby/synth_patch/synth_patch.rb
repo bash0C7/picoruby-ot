@@ -4,9 +4,9 @@ require 'json'
 # Builds a node graph, compiles it to JSON for the audio adapter, and provides
 # a UART-compatible note_on/note_off interface.
 class SynthPatch
-  ADSR_DEFAULTS = { attack: 0.01, decay: 0.3, sustain: 0.6, release: 0.3 }.freeze
+  ADSR_DEFAULTS = { attack: 0.01, release: 0.3 }.freeze
 
-  attr_reader :attack, :decay, :sustain, :release
+  attr_reader :attack, :release
 
   def self.build(adapter:, &block)
     patch = new(adapter)
@@ -22,8 +22,6 @@ class SynthPatch
     @active = false
     @last_note_time = nil
     @attack  = ADSR_DEFAULTS[:attack]
-    @decay   = ADSR_DEFAULTS[:decay]
-    @sustain = ADSR_DEFAULTS[:sustain]
     @release = ADSR_DEFAULTS[:release]
   end
 
@@ -93,14 +91,6 @@ class SynthPatch
     @attack = val.to_f
   end
 
-  def set_decay(val)
-    @decay = val.to_f
-  end
-
-  def set_sustain(val)
-    @sustain = val.to_f
-  end
-
   def set_release(val)
     @release = val.to_f
   end
@@ -109,7 +99,7 @@ class SynthPatch
 
   def status
     node_lines = @named_nodes.map { |_name, node| node.status_line }
-    adsr_str = "adsr=#{@attack}/#{@decay}/#{@sustain}/#{@release}"
+    adsr_str = "ar=#{@attack}/#{@release}"
     active_str = "active=#{@active}"
     (node_lines + [adsr_str, active_str]).join(' ')
   end
@@ -118,7 +108,7 @@ class SynthPatch
     all = collect_all_nodes
     {
       nodes: all.map(&:to_h),
-      adsr: { attack: @attack, decay: @decay, sustain: @sustain, release: @release },
+      adsr: { attack: @attack, release: @release },
       active: @active
     }
   end
@@ -188,6 +178,6 @@ class SynthPatch
   end
 
   def adsr_params
-    { attack: @attack, decay: @decay, sustain: @sustain, release: @release }
+    { attack: @attack, release: @release }
   end
 end

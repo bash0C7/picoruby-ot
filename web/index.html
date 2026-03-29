@@ -146,10 +146,8 @@
   <!-- 2-col: Envelope + Mapping -->
   <div class="grid2">
     <div class="sec">
-      <div class="t">Envelope ADSR</div>
+      <div class="t">Envelope AR</div>
       <div class="row"><label>Attack ms</label><input type="range" min="1" max="2000" value="10" oninput="p('attack',this.value);this.nextElementSibling.textContent=this.value"><span class="v">10</span></div>
-      <div class="row"><label>Decay ms</label><input type="range" min="1" max="2000" value="50" oninput="p('decay',this.value);this.nextElementSibling.textContent=this.value"><span class="v">50</span></div>
-      <div class="row"><label>Sustain</label><input type="range" min="0" max="1" step="0.01" value="0.7" oninput="p('sustain',this.value);this.nextElementSibling.textContent=(+this.value).toFixed(2)"><span class="v">0.70</span></div>
       <div class="row"><label>Release ms</label><input type="range" min="10" max="5000" value="200" oninput="p('release',this.value);this.nextElementSibling.textContent=this.value"><span class="v">200</span></div>
     </div>
     <div class="sec">

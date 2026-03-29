@@ -60,9 +60,9 @@ group "SynthPatch ADSR defaults"
 
 defaults = SynthPatch::ADSR_DEFAULTS
 assert_equal 0.01, defaults[:attack], "default attack"
-assert_equal 0.3, defaults[:decay], "default decay"
-assert_equal 0.6, defaults[:sustain], "default sustain"
 assert_equal 0.3, defaults[:release], "default release"
+assert_equal nil, defaults[:decay], "no decay"
+assert_equal nil, defaults[:sustain], "no sustain"
 
 group "SynthPatch — attack/release setters"
 

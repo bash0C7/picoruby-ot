@@ -69,8 +69,6 @@ class SynthApp
     when 'filter_q'     then @presets.patch[:filter]&.set_param(:q, value.to_f)
     when 'master_gain'  then JS.global[:synthMasterGain] = value.to_f
     when 'attack'       then @presets.patch&.set_attack(value.to_f / 1000.0)
-    when 'decay'        then @presets.patch&.set_decay(value.to_f / 1000.0)
-    when 'sustain'      then @presets.patch&.set_sustain(value.to_f)
     when 'release'      then @presets.patch&.set_release(value.to_f / 1000.0)
     end
   end

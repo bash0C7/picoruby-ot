@@ -13,8 +13,6 @@ class SynthPatch
         freq.to_f,
         duty.to_f,
         adsr_params[:attack].to_f,
-        adsr_params[:decay].to_f,
-        adsr_params[:sustain].to_f,
         adsr_params[:release].to_f
       )
     end
