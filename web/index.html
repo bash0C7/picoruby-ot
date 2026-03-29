@@ -199,25 +199,28 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@ruby/4.0-wasm-wasi@2.8.1/dist/browser.script.iife.js"></script>
-<script type="text/ruby" src="src/ruby/synth_patch/audio_adapter.rb"></script>
-<script type="text/ruby" src="src/ruby/synth_patch/node.rb"></script>
-<script type="text/ruby" src="src/ruby/synth_patch/osc_node.rb"></script>
-<script type="text/ruby" src="src/ruby/synth_patch/fm_op_node.rb"></script>
-<script type="text/ruby" src="src/ruby/synth_patch/filter_node.rb"></script>
-<script type="text/ruby" src="src/ruby/synth_patch/gain_node.rb"></script>
-<script type="text/ruby" src="src/ruby/synth_patch/mixer_node.rb"></script>
-<script type="text/ruby" src="src/ruby/synth_patch/synth_patch.rb"></script>
-<script type="text/ruby" src="src/ruby/synth_patch/web_adapter.rb"></script>
-<script type="text/ruby" src="src/ruby/serial.rb"></script>
-<script type="text/ruby" src="src/ruby/sensor_mapper.rb"></script>
-<script type="text/ruby" src="src/ruby/preset_manager.rb"></script>
-<script type="text/ruby" src="src/ruby/main.rb"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/audio_adapter.rb?v=20260329c"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/node.rb?v=20260329c"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/osc_node.rb?v=20260329c"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/fm_op_node.rb?v=20260329c"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/filter_node.rb?v=20260329c"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/gain_node.rb?v=20260329c"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/mixer_node.rb?v=20260329c"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/synth_patch.rb?v=20260329c"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/web_adapter.rb?v=20260329c"></script>
+<script type="text/ruby" src="src/ruby/serial.rb?v=20260329c"></script>
+<script type="text/ruby" src="src/ruby/sensor_mapper.rb?v=20260329c"></script>
+<script type="text/ruby" src="src/ruby/preset_manager.rb?v=20260329c"></script>
+<script type="text/ruby" src="src/ruby/main.rb?v=20260329c"></script>
 
 <script>
 // ============================================================
 // Global audio state
 // ============================================================
-let audioContext, analyser, analyserData;
+let audioContext;
+// analyser and analyserData are set by Ruby WebAdapter via JS.global[:analyser]
+// Access as window.analyser / window.analyserData from draw functions
+let analyser, analyserData;
 window.synthMasterGain    = 0.4;
 window.fmDepthScale       = 400;
 window.synthGlideTime     = 0.3;
@@ -500,20 +503,22 @@ function drawOscilloscope() {
   ctx.setLineDash([]);
   ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke();
-  if (!analyser) {
+  const _analyser = window.analyser || analyser;
+  const _analyserData = window.analyserData || analyserData;
+  if (!_analyser) {
     ctx.fillStyle = '#2a2a2a'; ctx.font = '11px monospace'; ctx.textAlign = 'center';
     ctx.fillText('Init Audio to enable oscilloscope', W / 2, H / 2 + 4);
     return;
   }
-  analyser.getFloatTimeDomainData(analyserData);
-  const offset = findZeroCrossing(analyserData, 100);
-  const samples = Math.min(analyserData.length - offset, W);
+  _analyser.getFloatTimeDomainData(_analyserData);
+  const offset = findZeroCrossing(_analyserData, 100);
+  const samples = Math.min(_analyserData.length - offset, W);
   ctx.strokeStyle = '#00ee66'; ctx.lineWidth = 1.5;
   ctx.shadowColor = '#00ff55'; ctx.shadowBlur = 4;
   ctx.beginPath();
   for (let i = 0; i < samples; i++) {
     const x = i / samples * W;
-    const y = (1 - (analyserData[offset + i] + 1) / 2) * H;
+    const y = (1 - (_analyserData[offset + i] + 1) / 2) * H;
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   }
   ctx.stroke();
@@ -533,10 +538,13 @@ function drawLevelMeter() {
   const ctx = c.getContext('2d');
   const W = c.width, H = c.height;
   ctx.fillStyle = '#060606'; ctx.fillRect(0, 0, W, H);
-  if (!analyser || !analyserData) return;
+  const _analyserLm = window.analyser || analyser;
+  const _analyserDataLm = window.analyserData || analyserData;
+  if (!_analyserLm || !_analyserDataLm) return;
+  _analyserLm.getFloatTimeDomainData(_analyserDataLm);
   let sum = 0;
-  for (let i = 0; i < analyserData.length; i++) sum += analyserData[i] * analyserData[i];
-  const rms = Math.sqrt(sum / analyserData.length);
+  for (let i = 0; i < _analyserDataLm.length; i++) sum += _analyserDataLm[i] * _analyserDataLm[i];
+  const rms = Math.sqrt(sum / _analyserDataLm.length);
   const dbFS = rms > 1e-6 ? 20 * Math.log10(rms) : -80;
   const norm = Math.max(0, Math.min(1, (dbFS + 60) / 60));
   if (norm > peakLevel) { peakLevel = norm; peakHoldFrames = 40; }
@@ -649,11 +657,15 @@ async function serialDisconnect() {
 // Audio init (requires user gesture)
 // ============================================================
 async function initAudio() {
-  audioContext = audioContext || new AudioContext();
-  if (audioContext.state === 'suspended') await audioContext.resume();
-  document.getElementById('ast').textContent = audioContext.state;
-  document.getElementById('ast').className = 'st';
-  if (sp._pending) window.synthPatchBuild(sp._pending);
+  // rubyInitAudio registered by Ruby after ruby.wasm loads
+  if (window.rubyInitAudio) {
+    window.rubyInitAudio();
+  } else {
+    // Fallback: resume context only (Ruby not ready yet)
+    audioContext = audioContext || new AudioContext();
+    if (audioContext.state === 'suspended') await audioContext.resume();
+    document.getElementById('ast').textContent = 'waiting for Ruby...';
+  }
 }
 
 // Param dispatch to Ruby
