@@ -13,7 +13,7 @@ class SensorMapper
   }
 
   attr_accessor :accel_scale
-  attr_reader :dist_min, :dist_max, :midi_min, :midi_max
+  attr_reader :dist_min, :dist_max, :midi_min, :midi_max, :dist_curve, :accel_curve
 
   def initialize
     @accel_scale = 500.0
@@ -22,6 +22,8 @@ class SensorMapper
     @midi_min    = MIDI_MIN_DEFAULT
     @midi_max    = MIDI_MAX_DEFAULT
     @scale       = :pentatonic
+    @dist_curve  = :linear
+    @accel_curve = :linear
     build_scale_notes
   end
 
@@ -42,10 +44,19 @@ class SensorMapper
     build_scale_notes
   end
 
+  def set_dist_curve(type)
+    @dist_curve = type
+  end
+
+  def set_accel_curve(type)
+    @accel_curve = type
+  end
+
   def distance_to_note(dist_mm)
     clamped = dist_mm.clamp(@dist_min, @dist_max)
     ratio   = (clamped - @dist_min).to_f / (@dist_max - @dist_min)
-    raw     = @midi_min + (ratio * (@midi_max - @midi_min)).to_i
+    curved  = apply_curve(ratio, @dist_curve)
+    raw     = @midi_min + (curved * (@midi_max - @midi_min)).round
     snap_to_scale(raw)
   end
 
@@ -59,7 +70,8 @@ class SensorMapper
   end
 
   def accel_to_fm_depth(ax, ay, az)
-    ((ax.abs + ay.abs + az.abs).to_f / @accel_scale).clamp(0.0, 1.0)
+    ratio = ((ax.abs + ay.abs + az.abs).to_f / @accel_scale).clamp(0.0, 1.0)
+    apply_curve(ratio, @accel_curve)
   end
 
   def apply_curve(ratio, curve_type)

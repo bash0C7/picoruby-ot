@@ -126,3 +126,35 @@ m = SensorMapper.new
 assert_in_delta(0.0, m.apply_curve(0.0, :s_curve), 0.001, "s_curve 0.0")
 assert_in_delta(0.5, m.apply_curve(0.5, :s_curve), 0.001, "s_curve 0.5 = midpoint")
 assert_in_delta(1.0, m.apply_curve(1.0, :s_curve), 0.001, "s_curve 1.0")
+
+group "SensorMapper — dist_curve / accel_curve state"
+
+m = SensorMapper.new
+assert_equal :linear, m.dist_curve, "default dist_curve is linear"
+assert_equal :linear, m.accel_curve, "default accel_curve is linear"
+
+m.set_dist_curve(:log)
+assert_equal :log, m.dist_curve, "dist_curve updated to log"
+
+m.set_accel_curve(:exp)
+assert_equal :exp, m.accel_curve, "accel_curve updated to exp"
+
+group "SensorMapper#distance_to_note — with log curve"
+
+m = SensorMapper.new
+m.set_scale(:chromatic)
+m.set_dist_curve(:log)
+m2 = SensorMapper.new
+m2.set_scale(:chromatic)
+note_linear = m2.distance_to_note(200)
+note_log = m.distance_to_note(200)
+assert(note_log >= note_linear, "log curve: note_log(#{note_log}) >= note_linear(#{note_linear})")
+
+group "SensorMapper#accel_to_fm_depth — with exp curve"
+
+m = SensorMapper.new
+m.set_accel_curve(:exp)
+depth_exp = m.accel_to_fm_depth(100, 100, 100)
+m2 = SensorMapper.new
+depth_lin = m2.accel_to_fm_depth(100, 100, 100)
+assert(depth_exp <= depth_lin, "exp curve: depth_exp(#{depth_exp}) <= depth_lin(#{depth_lin})")
