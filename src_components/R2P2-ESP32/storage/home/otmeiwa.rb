@@ -22,7 +22,7 @@ class SensorLEDVisualizer
   def update(distance, ax, ay, az, sound_on)
     if sound_on
       hue        = ((distance - DIST_MIN) * 384 / (DIST_MAX - DIST_MIN)).clamp(0, 383)
-      saturation = ((ax.abs + ay.abs + az.abs) * 155 / 1500 + 100).clamp(100, 255)
+      saturation = 220
       brightness = 150
     else
       hue        = 0
