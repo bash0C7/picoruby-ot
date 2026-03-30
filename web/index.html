@@ -789,9 +789,11 @@ window._setFeedbackAmount = function(amount) {
 
 // Reverb IR: white noise × exponential decay envelope
 window._createReverbIR = function(decaySeconds) {
-  var sampleRate = _audioCtx.sampleRate;
+  var ctx = window._audioCtx;
+  if (!ctx) return null;
+  var sampleRate = ctx.sampleRate;
   var length = Math.floor(sampleRate * Math.max(0.1, decaySeconds));
-  var buffer = _audioCtx.createBuffer(2, length, sampleRate);
+  var buffer = ctx.createBuffer(2, length, sampleRate);
   for (var c = 0; c < 2; c++) {
     var data = buffer.getChannelData(c);
     for (var i = 0; i < length; i++) {
