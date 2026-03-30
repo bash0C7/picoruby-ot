@@ -21,6 +21,8 @@ class SynthPatch
       @release_gain_node  = nil
       @release_gain_param = nil
       @fb_gain_param = nil
+      @fx_type = "none"
+      @fx_mix  = 0.5
     end
 
     def init_audio
@@ -177,6 +179,8 @@ class SynthPatch
       @mod_gain_param     = nil
       @master_gain_param  = nil
       @fb_gain_param      = nil
+      @fx_type = "none"
+      @fx_mix  = 0.5
       @nodes.each_value do |n|
         n.each_value do |web_node|
           next unless web_node.respond_to?(:disconnect)
@@ -226,6 +230,73 @@ class SynthPatch
         gain = @ctx.createGain
         gain[:gain][:value] = 1.0
         { gain_node: gain }
+      when "fx"
+        in_gain = @ctx.createGain
+        in_gain[:gain][:value] = 1.0
+        out_gain = @ctx.createGain
+        out_gain[:gain][:value] = 1.0
+        dry_gain = @ctx.createGain
+        dry_gain[:gain][:value] = 1.0
+
+        # Echo
+        delay_node = @ctx.createDelay(1.0)
+        delay_node[:delayTime][:value] = (params["delay_time"] || 0.2).to_f
+        fb_gain = @ctx.createGain
+        fb_gain[:gain][:value] = (params["feedback"] || 0.4).to_f
+        echo_wet = @ctx.createGain
+        echo_wet[:gain][:value] = 0.0
+
+        # Reverb
+        convolver = @ctx.createConvolver
+        decay_val = (params["decay"] || 2.0).to_f
+        begin
+          ir = JS.global._createReverbIR(decay_val)
+          convolver[:buffer] = ir
+        rescue
+          nil
+        end
+        reverb_wet = @ctx.createGain
+        reverb_wet[:gain][:value] = 0.0
+
+        # Distortion
+        waveshaper = @ctx.createWaveShaper
+        drive_val = (params["drive"] || 50).to_f
+        begin
+          curve = JS.global._createDistortionCurve(drive_val)
+          waveshaper[:curve] = curve
+        rescue
+          nil
+        end
+        waveshaper[:oversample] = "4x"
+        tone_filter = @ctx.createBiquadFilter
+        tone_filter[:type] = "lowpass"
+        tone_filter[:frequency][:value] = (params["tone"] || 3000).to_f
+        dist_wet = @ctx.createGain
+        dist_wet[:gain][:value] = 0.0
+
+        # Wire: dry path
+        in_gain.connect(dry_gain)
+        dry_gain.connect(out_gain)
+        # Wire: echo path (feedback loop)
+        in_gain.connect(delay_node)
+        delay_node.connect(fb_gain)
+        fb_gain.connect(delay_node)
+        delay_node.connect(echo_wet)
+        echo_wet.connect(out_gain)
+        # Wire: reverb path
+        in_gain.connect(convolver)
+        convolver.connect(reverb_wet)
+        reverb_wet.connect(out_gain)
+        # Wire: distortion path
+        in_gain.connect(waveshaper)
+        waveshaper.connect(tone_filter)
+        tone_filter.connect(dist_wet)
+        dist_wet.connect(out_gain)
+
+        { in_gain: in_gain, out_gain: out_gain, dry_gain: dry_gain,
+          delay_node: delay_node, fb_gain: fb_gain, echo_wet: echo_wet,
+          convolver: convolver, reverb_wet: reverb_wet,
+          waveshaper: waveshaper, tone_filter: tone_filter, dist_wet: dist_wet }
       else
         {}
       end
@@ -280,12 +351,12 @@ class SynthPatch
 
     # 出力端子取得
     def get_output(node)
-      node[:gain] || node[:gain_node] || node[:filter] || node[:osc]
+      node[:out_gain] || node[:gain] || node[:gain_node] || node[:filter] || node[:osc]
     end
 
     # 入力端子取得
     def get_input(node)
-      node[:filter] || node[:gain_node] || node[:osc]
+      node[:in_gain] || node[:filter] || node[:gain_node] || node[:osc]
     end
   end
 end
