@@ -65,7 +65,7 @@ class UIController
   def start_animation(analyser)
     @analyser = analyser
     # RAFコールバック事前確保 — 毎フレーム新規lambda生成回避
-    @raf_callback = lambda { |_| animate_frame }
+    @raf_callback = lambda { animate_frame }
     animate_frame
   end
 
