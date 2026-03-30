@@ -11,6 +11,7 @@ class SynthApp
     @attack = 0.01
     @release = 0.2
     @volume = 0.4
+    @serial_monitor_text = ""
   end
 
   def init_audio
@@ -38,7 +39,7 @@ class SynthApp
   def on_connect(baud)
     baud_i = baud.to_i
     @serial.on_connect(baud_i)
-    # シリアル状態UI更新
+    @adapter&.update_gain(@volume, @attack)
     update_serial_status("connected at #{baud_i}bps", @serial.parse_error_count)
   end
 
@@ -70,7 +71,7 @@ class SynthApp
 
     @adapter.update_freq(freq.to_f, @glide_sec)
     @adapter.update_fm_depth(fm_depth)
-    @adapter.update_gain(@volume, @attack)
+    # update_gain は on_connect / on_disconnect でのみ呼ぶ (ドローン常時オン)
 
     # センサー表示更新
     note_str = @mapper.note_name(note)
@@ -197,10 +198,10 @@ class SynthApp
 
   # シリアルモニターUI更新
   def update_serial_monitor(line)
+    @serial_monitor_text = (line + "\n" + @serial_monitor_text)[0, 2000]
     el = JS.global[:document].querySelector("#serial-monitor")
     begin
-      current = el[:textContent].to_s
-      el[:textContent] = (line + "\n" + current)[0, 2000]
+      el[:textContent] = @serial_monitor_text
     rescue JS::Error
     end
   end

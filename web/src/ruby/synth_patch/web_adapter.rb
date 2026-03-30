@@ -43,6 +43,7 @@ class SynthPatch
         next unless node
         osc = node[:osc]
         next unless osc
+        osc[:frequency].cancelScheduledValues(0)
         osc[:frequency].setTargetAtTime(freq.to_f, now, [glide_sec.to_f, 0.001].max)
       end
     end
@@ -54,6 +55,7 @@ class SynthPatch
       return unless node
       gain = node[:gain]
       return unless gain
+      gain[:gain].cancelScheduledValues(0)
       gain[:gain].setTargetAtTime(depth.to_f * @fm_depth_scale, now, 0.01)
     end
 
@@ -64,6 +66,7 @@ class SynthPatch
       return unless node
       g = node[:gain_node]
       return unless g
+      g[:gain].cancelScheduledValues(0)
       g[:gain].setTargetAtTime(target.to_f, now, [smoothing.to_f, 0.001].max)
     end
 
