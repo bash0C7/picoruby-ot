@@ -110,8 +110,10 @@ Sends `<D:NNNN,AX:NNNN,AY:NNNN,AZ:NNNN>` at ~20fps via UART0/USB.
 Distance 20–900mm. Accel calibration on button press.
 15 LEDs on GPIO26: hue=distance, sat=accel magnitude.
 
-### web/ — Polyphonic FM Synthesizer (Chrome)
+### web/ — Portamento Drone FM Synthesizer (Chrome)
 
 ruby.wasm app. Web Serial 115200bps from otmeiwa.rb.
-Distance→pitch (log scale), accel→FM depth.
-Canvas: synth patch graph, oscilloscope, level meter, sensor history.
+Always-on drone. Distance→continuous pitch (portamento, no note snap), accel→FM depth.
+Glide TC=40ms ≈ 20fps frame period for smooth inter-frame pitch interpolation.
+Canvas: oscilloscope, level meter, accel curve.
+Operational distance range: 30–570mm → MIDI 48–72 (2 octaves, ~23mm/semitone).

@@ -1,6 +1,6 @@
 # picoruby-ot Web Synthesizer
 
-Chrome-only web synth controlled by ATOM Matrix sensor data via Web Serial API.
+Chrome-only portamento drone synth controlled by ATOM Matrix sensor data via Web Serial API.
 Built with ruby.wasm (@ruby/4.0-wasm-wasi 2.8.1) + Web Audio API.
 
 ## Language Policy
@@ -9,11 +9,23 @@ Built with ruby.wasm (@ruby/4.0-wasm-wasi 2.8.1) + Web Audio API.
 - User communication: Japanese with suffix
 - README.md: English only, no bold, no emoji
 
+## Instrument Concept: Portamento Drone
+
+The instrument is a **continuously sounding drone with portamento**.
+
+- Sound is always on while serial is connected (drone mode)
+- Distance controls pitch continuously — no note quantization, no scale snap
+- Pitch slides smoothly between frames (violin-like portamento)
+- Accel (shake) controls FM depth (timbre change)
+- Gain changes only on connect (fade in) and disconnect (fade out)
+
+This is NOT a trigger-based instrument. There is no note-on/note-off.
+
 ## Architecture
 
 ```
 otmeiwa.rb (PicoRuby/ATOM Matrix)
-    | USB Serial 115200bps
+    | USB Serial 115200bps ~20fps
     | <D:NNNN,AX:NNNN,AY:NNNN,AZ:NNNN>\n
     v
 index.html (Chrome)
@@ -28,7 +40,7 @@ index.html (Chrome)
 ```
 HTML  -> Static structure only
 CSS   -> Styling only
-JS    -> Web Serial async only + UI event bridge
+JS    -> Web Serial async + UI event bridge + _audioParamBatchUpdate helper
 Ruby  -> All control (Web Audio, DOM, Canvas, state, logic)
 ```
 
@@ -42,10 +54,96 @@ Serial Port --JS async--> rubySerialOnReceive
                           SynthApp.update(dist, ax, ay, az)
                               |
                     +---------+---------+
-                    v         v         v
-              SensorMapper  WebAdapter  UIController
-              (compute)     (audio)     (display)
+                    v                   v
+              SensorMapper         WebAdapter._audioParamBatchUpdate (JS)
+              distance_to_midi_float    cancelAndHoldAtTime + setTargetAtTime
+              note_to_freq              (carrier freq, mod freq, FM depth)
+              accel_to_fm_depth
 ```
+
+## Portamento Implementation
+
+### Core: setTargetAtTime with TC ≈ frame period
+
+Serial frame rate is ~20fps (50ms interval). Glide time constant (TC) must be close to the frame period for smooth inter-frame interpolation:
+
+| TC | Effect |
+|----|--------|
+| 5-10ms | TC << frame period → snaps to each frame's value, holds → choppy 50ms steps |
+| **40ms** | TC ≈ frame period → exponential curve from each frame overlaps the next → smooth portamento |
+| 100ms+ | TC >> frame period → significant lag behind hand position |
+
+**Default glide: 40ms.**
+
+### cancelAndHoldAtTime (CRITICAL — never use cancelScheduledValues)
+
+```js
+// CORRECT: holds current interpolated value, starts new curve from there
+param.cancelAndHoldAtTime(now);
+param.setTargetAtTime(newFreq, now, tc);
+
+// WRONG: snaps back to initial value (220Hz), destroys portamento
+param.cancelScheduledValues(0);
+```
+
+### JS Batch Helper (minimize ruby.wasm JS::Object allocations)
+
+Every ruby.wasm JS interop call creates a JS::Object in the WASM heap. To reduce
+per-frame allocations to one call, freq + FM depth updates are delegated to a JS helper:
+
+```js
+window._audioParamBatchUpdate = function(freq, fmDepthScaled, glide) {
+  var now = ctx.currentTime;
+  var tc = glide > 0.001 ? glide : 0.001;
+  _carrierFreqParam.cancelAndHoldAtTime(now);
+  _carrierFreqParam.setTargetAtTime(freq, now, tc);
+  _modFreqParam.cancelAndHoldAtTime(now);
+  _modFreqParam.setTargetAtTime(freq, now, tc);
+  _modGainParam.cancelAndHoldAtTime(now);
+  _modGainParam.setTargetAtTime(fmDepthScaled, now, 0.01);
+};
+```
+
+Ruby side calls once per frame:
+```ruby
+@adapter.batch_update(freq, fm_depth, @glide_sec)
+```
+
+AudioParam references (`_carrierFreqParam`, `_modFreqParam`, `_modGainParam`) are cached
+in `cache_audio_params` after `build_graph` and re-exposed to JS globals on preset switch.
+
+## Stateless Update Loop
+
+```ruby
+def update(dist_mm, ax, ay, az)
+  return unless @adapter
+  midi_float = @mapper.distance_to_midi_float(dist_mm)
+  freq       = @mapper.note_to_freq(midi_float)
+  fm_depth   = @mapper.accel_to_fm_depth(ax, ay, az)
+  @adapter.batch_update(freq, fm_depth, @glide_sec)
+  # update_gain: on_connect/on_disconnect only (drone always on)
+  note_str = @mapper.note_name(midi_float.round)
+  update_sensor_display(dist_mm, ax, ay, az, freq, fm_depth, note_str)
+end
+```
+
+No `@sounding` flag. No `in_range?` check. Gain is set once on connect.
+
+## Sensor Mapping
+
+```
+Distance 30-570mm  -> MIDI 48-72 (2 octaves, C3-C5, linear)
+                   -> freq via equal temperament: 440 * 2^((midi-69)/12)
+                   -> Note display: A3=440Hz convention (midi/12 - 2)
+
+Accel (ax+ay+az)   -> FM depth 0.0-1.0 via apply_curve(ratio, curve_type)
+                   -> Curves: linear / log / exp / s_curve
+```
+
+**Operational range (real hardware, VL53L0X):** 30mm minimum, 570mm maximum.
+
+Distance mapping is linear to MIDI note (equal semitone spacing per mm: ~23mm/semitone).
+No scale quantization. No note snapping.
 
 ## File Structure
 
@@ -54,11 +152,11 @@ web/
 +-- index.html              # Single-file app (HTML + CSS + minimal JS + ruby.wasm)
 +-- test.html               # ruby.wasm unit test runner
 +-- src/ruby/
-    +-- main.rb             # SynthApp: callbacks, stateless update loop
+    +-- main.rb             # SynthApp: callbacks, portamento update loop
     +-- serial.rb           # Frame parser + buffer + RX log
-    +-- sensor_mapper.rb    # distance->note, accel->FM, curves, transpose
+    +-- sensor_mapper.rb    # distance->MIDI float, accel->FM depth, curves, transpose
     +-- ui_controller.rb    # DOM updates, Canvas curves, oscilloscope, level meter
-    +-- preset_manager.rb   # Preset definitions, switching
+    +-- preset_manager.rb   # Preset definitions (otamatone/clean/acid/retro), switching
     +-- test_helper.rb      # Go-style mini test framework
     +-- *_test.rb           # Unit test files
     +-- synth_patch/
@@ -79,14 +177,6 @@ JS.global[:rubyOnParamUpdate]      = lambda { |key, value| app.on_param(key.to_s
 JS.global[:rubyInitAudio]          = lambda { app.init_audio }
 ```
 
-### Ruby -> Web Audio (direct via JS.global)
-
-```ruby
-@ctx = JS.global[:AudioContext].new
-osc = @ctx.createOscillator
-osc[:frequency].setTargetAtTime(440.0, @ctx[:currentTime].to_f, 0.005)
-```
-
 ### Ruby -> DOM (direct via JS.global)
 
 ```ruby
@@ -94,18 +184,16 @@ el = JS.global[:document].querySelector("#note-display")
 begin
   el[:textContent] = "C4"
 rescue JS::Error
+  # querySelector returned null — always rescue, never use obj.nil? (always false on JS::Object)
 end
 ```
 
-### JS::Object nil check (CRITICAL)
+### DOM element caching (CRITICAL for 20fps loop)
 
+Cache DOM element references in `init_audio`, reuse every frame:
 ```ruby
-# WRONG: obj.nil?  -> always false on JS::Object
-# For querySelector null results, use begin/rescue:
-begin
-  el[:textContent] = "text"
-rescue JS::Error
-end
+@el_note = JS.global[:document].querySelector("#note-display")
+# reuse @el_note in update loop — avoids JS::Object allocation per frame
 ```
 
 ### SynthPatch DSL
@@ -122,32 +210,29 @@ patch = SynthPatch.build(adapter: adapter) do |syn|
 end
 ```
 
-## Stateless Update (every frame)
+## UI Controls
 
-```ruby
-def update(dist_mm, ax, ay, az)
-  freq     = @mapper.note_to_freq(@mapper.distance_to_note(dist_mm))
-  fm_depth = @mapper.accel_to_fm_depth(ax, ay, az)
-  in_range = @mapper.in_range?(dist_mm)
-  @adapter.update_freq(freq, @glide_sec)
-  @adapter.update_fm_depth(fm_depth)
-  @adapter.update_gain(in_range ? @volume : 0.0, in_range ? @attack : @release)
-end
-```
-
-No @sounding flag. Default gain=0. setTargetAtTime handles transitions.
-
-## Web Serial API (JS Only)
-
-Async API kept in JS as glue. Calls `rubySerialOnReceive(value)`.
-Requirements: Chrome only, HTTPS or localhost, user gesture required.
+| Control | Default | Range |
+|---------|---------|-------|
+| Glide | 40ms | 0-200ms |
+| Attack | 10ms | 1-2000ms |
+| Release | 300ms | 10-5000ms |
+| Preset | otamatone | otamatone / clean / acid / retro |
+| Octave | center | ±2 octave (dot indicator) |
+| Filter type | radio buttons | Low Pass / High Pass / Band Pass / Notch |
+| Accel curve | linear | linear / log / exp / s_curve |
 
 ## Canvas (Ruby Side via UIController)
 
 - `#oscilloscope`: Waveform (AnalyserNode)
 - `#level-meter`: RMS level bar
-- `#dist-curve-canvas`: Distance->pitch curve (Lin/Log/Exp/S)
-- `#accel-curve-canvas`: Accel->FM depth curve
+- `#accel-curve-canvas`: Accel->FM depth curve (redraws on curve type change)
+
+## Memory Monitor (JS, header)
+
+Displays `Mem:used/totalMB ETA~Nm` every 10s using `performance.memory`.
+ETA estimates time to 2GB WASM heap crash based on growth rate.
+Useful for detecting ruby.wasm memory leaks during development.
 
 ## Testing
 
@@ -156,14 +241,22 @@ Cache: ruby.wasm caches aggressively. Bump `?v=` suffix when changing Ruby files
 
 ## JS Minimalism Policy
 
-JS is Web Serial async glue + UI event bridge only. All logic in Ruby.
+JS responsibilities (exhaustive):
+1. Web Serial connect/disconnect/readLoop (async API)
+2. ruby.wasm loader
+3. UI event listeners → `rubyOnParamUpdate` bridge
+4. `_audioParamBatchUpdate` helper (AudioParam updates, 1 call/frame)
+5. `_audioReleaseVoice` helper (release voice trigger)
+6. Memory monitor
+
+JS does NOT: touch Web Audio nodes directly, manage state, update DOM text.
 
 ## Development Workflow
 
 1. Edit Ruby files in `web/src/ruby/`
-2. Test: `http://localhost:8000/test.html`
-3. Verify: `http://localhost:8000/index.html`
-4. Cache: Bump `?v=` suffix when changing Ruby files
+2. Bump `?v=` cache suffix for changed files in `index.html`
+3. Test: `http://localhost:8000/test.html`
+4. Verify: `http://localhost:8000/index.html`
 
 ## Commit Policy
 
