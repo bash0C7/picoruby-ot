@@ -81,7 +81,7 @@ class UIController
     # JSヘルパー呼び出し — ruby.wasm JS::Object生成を2回/フレームに削減
     JS.global._drawOscilloscope
     JS.global._drawLevelMeter
-    JS.global.setTimeout(@raf_callback, 50)
+    JS.global.setTimeout(@raf_callback, 100)
   end
 
   def apply_curve(ratio, curve_type)
