@@ -120,6 +120,11 @@ class SynthApp
     when "accel_scale" then @mapper.accel_scale = value.to_f
     when "cm_ratio"    then @cm_ratio = value.to_f
     when "feedback"    then @adapter&.set_feedback(value.to_f)
+    when "fx_type"
+      type = value.to_s
+      @adapter&.update_param("fx", "fx_type", type)
+      update_fx_buttons(type)
+      update_fx_graph_label(type)
     else
       # ノードパラメータ (例: "filter:cutoff", "master:gain")
       parts = key.split(":")
@@ -141,7 +146,13 @@ class SynthApp
     "filter:filter_type"  => :filter_type,
     "filter:cutoff"       => :cutoff,
     "filter:q"            => :q,
-    "master:gain"         => :gain_value
+    "master:gain"         => :gain_value,
+    "fx:mix"        => :mix,
+    "fx:delay_time" => :delay_time,
+    "fx:feedback"   => :feedback,
+    "fx:decay"      => :decay,
+    "fx:drive"      => :drive,
+    "fx:tone"       => :tone
   }
 
   # プリセット切替時にUIコントロール値を同期
@@ -154,6 +165,11 @@ class SynthApp
       val = node.respond_to?(attr) ? node.send(attr) : nil
       next unless val
       set_value("[data-param='#{param_key}']", val)
+    end
+    fx_node = patch[:fx]
+    if fx_node
+      update_fx_buttons(fx_node.fx_type.to_s)
+      update_fx_graph_label(fx_node.fx_type.to_s)
     end
   end
 
@@ -230,6 +246,31 @@ class SynthApp
     @serial_monitor_text = (line + "\n" + @serial_monitor_text)[0, 2000]
     begin
       @el_serial[:textContent] = @serial_monitor_text
+    rescue JS::Error
+    end
+  end
+
+  # FXタイプボタンのアクティブ状態更新
+  def update_fx_buttons(type)
+    ["none", "echo", "reverb", "distortion"].each do |t|
+      btn = JS.global[:document].querySelector("[data-fx='#{t}']")
+      begin
+        if t == type
+          btn[:classList].add("active")
+        else
+          btn[:classList].remove("active")
+        end
+      rescue JS::Error
+      end
+    end
+  end
+
+  # SynthパッチグラフのFXノードラベル更新
+  def update_fx_graph_label(type)
+    el = JS.global[:document].querySelector("#fx-graph-label")
+    begin
+      label = type == "none" ? "FX" : "FX(#{type})"
+      el[:textContent] = label
     rescue JS::Error
     end
   end
