@@ -11,9 +11,7 @@ class SynthApp
     @attack = 0.01
     @release = 0.3
     @volume = 0.4
-    # リリースボイス用: 前フレームの音程・周波数
-    @prev_midi_float = nil
-    @prev_freq       = nil
+    @mute_dist = nil
     @serial_monitor_text = ""
     # DOM要素キャッシュ (毎フレームquerySelector回避)
     @el_note   = nil
@@ -91,7 +89,8 @@ class SynthApp
     freq       = @mapper.note_to_freq(midi_float)
     fm_depth   = @mapper.accel_to_fm_depth(ax, ay, az)
 
-    gain = dist_mm < 25 ? 0.0 : @volume
+    @mute_dist = @mute_dist ? @mute_dist * 0.7 + dist_mm * 0.3 : dist_mm.to_f
+    gain = @mute_dist < 25 ? 0.0 : @volume
     @adapter.batch_update(freq, fm_depth, @glide_sec, gain, @release)
 
     note_str = @mapper.note_name(midi_float.round)  # 表示のみ: 最近傍ノート名

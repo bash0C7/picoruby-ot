@@ -624,12 +624,12 @@
 <script type="text/ruby" src="src/ruby/synth_patch/gain_node.rb?v=20260330h"></script>
 <script type="text/ruby" src="src/ruby/synth_patch/mixer_node.rb?v=20260330h"></script>
 <script type="text/ruby" src="src/ruby/synth_patch/synth_patch.rb?v=20260330h"></script>
-<script type="text/ruby" src="src/ruby/synth_patch/web_adapter.rb?v=20260330l"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/web_adapter.rb?v=20260330m"></script>
 <script type="text/ruby" src="src/ruby/serial.rb?v=20260330h"></script>
 <script type="text/ruby" src="src/ruby/sensor_mapper.rb?v=20260330j"></script>
 <script type="text/ruby" src="src/ruby/preset_manager.rb?v=20260330h"></script>
-<script type="text/ruby" src="src/ruby/ui_controller.rb?v=20260330h"></script>
-<script type="text/ruby" src="src/ruby/main.rb?v=20260330l"></script>
+<script type="text/ruby" src="src/ruby/ui_controller.rb?v=20260330m"></script>
+<script type="text/ruby" src="src/ruby/main.rb?v=20260330n"></script>
 
 <script>
 // ============================================================
@@ -703,39 +703,36 @@ window.addEventListener('unhandledrejection', function(e) {
 });
 
 // ============================================================
-// Memory monitor (10s interval)
+// Memory monitor (10s interval) — tracks actual WASM heap bytes
 // ============================================================
 (function() {
   var _samples = [];
   var CRASH_LIMIT = 2 * 1024 * 1024 * 1024;
   function tick() {
-    if (!performance.memory) return;
-    var total = performance.memory.totalJSHeapSize;
-    var used  = performance.memory.usedJSHeapSize;
-    var now   = Date.now();
-    _samples.push({ t: now, total: total });
+    var wasmMem = window.rubyVM && window.rubyVM.instance && window.rubyVM.instance.exports && window.rubyVM.instance.exports.memory;
+    var wasmBytes = wasmMem ? wasmMem.buffer.byteLength : 0;
+    var wasmMB = Math.round(wasmBytes / 1024 / 1024);
+    var now = Date.now();
+    _samples.push({ t: now, bytes: wasmBytes });
     if (_samples.length > 18) _samples.shift();
-    var usedMB  = Math.round(used  / 1024 / 1024);
-    var totalMB = Math.round(total / 1024 / 1024);
     var eta = '';
     if (_samples.length >= 2) {
       var s0 = _samples[0], s1 = _samples[_samples.length - 1];
       var dt = (s1.t - s0.t) / 1000;
-      var dTotal = s1.total - s0.total;
-      var rateMBmin = (dTotal / dt * 60 / 1024 / 1024).toFixed(2);
-      if (dTotal > 1024 * 1024 && dt > 0) {
-        var rate = dTotal / dt;
-        var sec = (CRASH_LIMIT - s1.total) / rate;
+      var dBytes = s1.bytes - s0.bytes;
+      var rateMBmin = (dBytes / dt * 60 / 1024 / 1024).toFixed(1);
+      if (dBytes > 1024 * 1024 && dt > 0) {
+        var rate = dBytes / dt;
+        var sec = (CRASH_LIMIT - s1.bytes) / rate;
         eta = sec < 3600
           ? ' ETA~' + Math.round(sec / 60) + 'm (+' + rateMBmin + 'MB/m)'
           : ' ETA~' + (sec / 3600).toFixed(1) + 'h (+' + rateMBmin + 'MB/m)';
       } else {
-        eta = ' ETA:∞ (' + rateMBmin + 'MB/m)';
+        eta = ' stable (+' + rateMBmin + 'MB/m)';
       }
     }
-    var wasmMB = window._wasmMemory ? Math.round(window._wasmMemory.buffer.byteLength/1024/1024) : '?';
     var el = document.getElementById('mem-display');
-    if (el) el.textContent = 'JS:' + usedMB + '/' + totalMB + 'MB WASM:' + wasmMB + 'MB' + eta;
+    if (el) el.textContent = 'WASM:' + wasmMB + 'MB' + eta;
   }
   tick();
   setInterval(tick, 10000);
@@ -776,6 +773,55 @@ window._audioReleaseVoice = function(oldFreq, gainVal, releaseTc) {
   window._releaseGainParam.cancelAndHoldAtTime(now);
   window._releaseGainParam.setValueAtTime(gainVal, now);
   window._releaseGainParam.setTargetAtTime(0.0, now, releaseTc > 0.05 ? releaseTc : 0.05);
+};
+
+// ============================================================
+// Canvas drawing helpers — eliminate ~2048 JS::Object/frame from ruby.wasm
+// Both share window.analyserData (preallocated Float32Array) to avoid per-frame alloc.
+// ============================================================
+window._drawOscilloscope = function() {
+  var analyser = window.analyser;
+  var canvas = document.getElementById('oscilloscope');
+  if (!analyser || !canvas) return;
+  var ctx = canvas.getContext('2d');
+  var w = canvas.width, h = canvas.height;
+  var buf = window.analyserData;
+  if (!buf || buf.length === 0) {
+    buf = new Float32Array(analyser.frequencyBinCount);
+    window.analyserData = buf;
+  }
+  analyser.getFloatTimeDomainData(buf);
+  ctx.clearRect(0, 0, w, h);
+  ctx.strokeStyle = '#4caf50';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  var sliceW = w / buf.length;
+  for (var i = 0; i < buf.length; i++) {
+    var y = (buf[i] * 0.5 + 0.5) * h;
+    if (i === 0) ctx.moveTo(0, y); else ctx.lineTo(i * sliceW, y);
+  }
+  ctx.stroke();
+};
+
+window._drawLevelMeter = function() {
+  var analyser = window.analyser;
+  var canvas = document.getElementById('level-meter');
+  if (!analyser || !canvas) return;
+  var ctx = canvas.getContext('2d');
+  var w = canvas.width, h = canvas.height;
+  var buf = window.analyserData;
+  if (!buf || buf.length === 0) {
+    buf = new Float32Array(analyser.frequencyBinCount);
+    window.analyserData = buf;
+  }
+  analyser.getFloatTimeDomainData(buf);
+  var sum = 0;
+  for (var i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+  var rms = Math.sqrt(sum / buf.length);
+  var level = Math.min(rms * 2, 1.0);
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = level > 0.8 ? '#f44336' : '#4caf50';
+  ctx.fillRect(0, 0, Math.round(level * w), h);
 };
 
 // ============================================================
