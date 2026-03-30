@@ -367,6 +367,7 @@ class SynthPatch
     # FXゲイン切替 (全wet=0後、指定タイプのみmixを適用)
     def apply_fx_gains(node, fx_type, mix)
       return unless node
+      return unless @ctx
       now = @ctx[:currentTime].to_f
       tc  = 0.01
       mix_f = mix.to_f.clamp(0.0, 1.0)
