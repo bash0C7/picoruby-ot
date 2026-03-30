@@ -4,8 +4,8 @@
 group "SensorMapper#initialize"
 
 m = SensorMapper.new
-assert_equal 20, m.dist_min, "default dist_min"
-assert_equal 900, m.dist_max, "default dist_max"
+assert_equal 30, m.dist_min, "default dist_min"
+assert_equal 570, m.dist_max, "default dist_max"
 assert_equal 48, m.midi_min, "default midi_min"
 assert_equal 72, m.midi_max, "default midi_max"
 assert_equal 500.0, m.accel_scale, "default accel_scale"
@@ -30,8 +30,8 @@ assert_equal "Eb3", m.note_name(63), "MIDI 63 = Eb3 (mixed notation)"
 group "SensorMapper#distance_to_midi_float — chromatic linear"
 
 m = SensorMapper.new
-note_min = m.distance_to_midi_float(20)
-note_max = m.distance_to_midi_float(900)
+note_min = m.distance_to_midi_float(30)
+note_max = m.distance_to_midi_float(570)
 assert_in_delta(48.0, note_min, 0.001, "dist_min → midi_min float")
 assert_in_delta(72.0, note_max, 0.001, "dist_max → midi_max float")
 
@@ -60,10 +60,10 @@ group "SensorMapper#in_range?"
 
 m = SensorMapper.new
 assert(m.in_range?(100), "100mm in range")
-assert(m.in_range?(20), "20mm boundary inclusive")
-assert(m.in_range?(900), "900mm boundary inclusive")
-assert(!m.in_range?(19), "19mm out of range")
-assert(!m.in_range?(901), "901mm out of range")
+assert(m.in_range?(30), "30mm boundary inclusive")
+assert(m.in_range?(570), "570mm boundary inclusive")
+assert(!m.in_range?(29), "29mm out of range")
+assert(!m.in_range?(571), "571mm out of range")
 
 group "SensorMapper#set_dist_range"
 
