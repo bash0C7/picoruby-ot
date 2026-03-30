@@ -787,6 +787,34 @@ window._setFeedbackAmount = function(amount) {
   window._fbGainParam.setTargetAtTime(amount, now, 0.01);
 };
 
+// Reverb IR: white noise × exponential decay envelope
+window._createReverbIR = function(decaySeconds) {
+  var sampleRate = _audioCtx.sampleRate;
+  var length = Math.floor(sampleRate * Math.max(0.1, decaySeconds));
+  var buffer = _audioCtx.createBuffer(2, length, sampleRate);
+  for (var c = 0; c < 2; c++) {
+    var data = buffer.getChannelData(c);
+    for (var i = 0; i < length; i++) {
+      var t = i / length;
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, 3);
+    }
+  }
+  return buffer;
+};
+
+// Distortion: tanh soft-clip curve, drive controls hardness
+window._createDistortionCurve = function(drive) {
+  var n = 256;
+  var curve = new Float32Array(n);
+  var d = Math.max(1, drive);
+  var norm = Math.tanh(d / 100) + 0.001;
+  for (var i = 0; i < n; i++) {
+    var x = (i * 2) / n - 1;
+    curve[i] = Math.tanh((d / 100) * x) / norm;
+  }
+  return curve;
+};
+
 window._audioReleaseVoice = function(oldFreq, gainVal, releaseTc) {
   var ctx = window._audioCtx;
   if (!ctx || !window._releaseGainParam || !window._releaseOsc) return;
