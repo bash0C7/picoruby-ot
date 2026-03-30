@@ -1,6 +1,6 @@
 ---
 name: web-synth-test
-description: Automated Chrome smoke test for the picoruby-ot web synthesizer. Use this skill whenever you need to verify the synth works after code changes — it starts the web server if needed, opens Chrome, and runs a full automated test sequence: Ruby VM boot, Init Audio, preset buttons, FM Edit controls, Test Mode sensor simulation, and error checks. Trigger on "test the synth", "smoke test", "verify web synth", "check the browser synth", or after any changes to index.html / web/src/ruby/*.rb.
+description: Automated Chrome smoke test for the picoruby-ot web synthesizer. Use this skill whenever you need to verify the synth works after code changes — it starts the web server if needed, opens Chrome, and runs a full automated test sequence: Ruby VM boot, Init Audio, preset buttons, FM Edit controls (C:M ratio, feedback), Test Mode sensor simulation with FM depth display check, and error checks. Trigger on "test the synth", "smoke test", "verify web synth", "check the browser synth", or after any changes to index.html / web/src/ruby/*.rb.
 user-invocable: true
 ---
 
@@ -10,7 +10,7 @@ Runs a Chrome-based smoke test of the picoruby-ot synthesizer at `http://localho
 
 ## Test Sequence
 
-Run steps 1–8 in order. Report a ✅/❌ result for each check.
+Run steps 1–9 in order. Report a ✅/❌ result for each check.
 
 ---
 
@@ -66,6 +66,9 @@ Visually verify:
 - ✅ "Parse errors: 0" visible
 - ✅ Synth Patch Graph canvas shows placeholder text "Init Audio to build synth patch graph"
 - ✅ Audio Monitor shows "Init Audio to enable oscilloscope"
+- ✅ Header sensor row contains `FM:` span (value `0.00` before Init Audio)
+- ✅ Controls panel contains **C:M** slider (range 0.1–8.0, default 1.00)
+- ✅ Controls panel contains **FB** slider (range 0.0–1.0, default 0.00)
 
 ---
 
@@ -110,24 +113,59 @@ Scroll to the bottom of the page to find the **Test Mode (no hardware)** section
    - ✅ "Test Connect" button becomes disabled, "Test Stop" / "Loop" / "Send Once" become enabled
 
 3. Move the **Dist mm** slider to a value other than 450 (e.g. 200), then click **Send Once**
-4. Verify in **Sensor Monitor**:
+4. Verify in **Sensor Monitor** and header:
    - ✅ `Dist mm` updates to the slider value
    - ✅ `Note` updates (e.g. G#3)
    - ✅ `Freq Hz` updates accordingly
+   - ✅ Header `FM:` value updates (non-zero if AX/AY/AZ sliders are non-zero)
 
-5. Click **Loop** — button label changes to "Stop Loop"
-6. Move **Dist mm** slider while loop is running
-7. Verify:
+5. Move **AX** slider to a non-zero value (e.g. 500), click **Send Once**
+6. Verify:
+   - ✅ Header `FM:` shows a value > 0.00
+
+7. Click **Loop** — button label changes to "Stop Loop"
+8. Move **Dist mm** slider while loop is running
+9. Verify:
    - ✅ `Dist mm`, `Note`, `Freq Hz` values update continuously
+   - ✅ Header `FM:` updates continuously
    - ✅ Oscilloscope canvas animates (waveform visible)
    - ✅ Level meter shows activity
 
-8. Click **Stop Loop** → updates stop
-9. Click **Test Stop** → serial status returns to `disconnected`
+10. Click **Stop Loop** → updates stop
+11. Click **Test Stop** → serial status returns to `disconnected`
 
 ---
 
-### Step 8: Check for console errors
+### Step 8: Test C:M ratio and Feedback sliders
+
+With Init Audio still active (click Test Connect again if needed):
+
+1. Find the **C:M** slider in the controls panel. Move it to **2.00**
+2. Verify:
+   - ✅ Label next to slider shows `2.00`
+   - ✅ No JS errors in console
+
+3. Move **C:M** slider to **0.50**
+4. Verify:
+   - ✅ Label shows `0.50`
+   - ✅ No JS errors
+
+5. Move **C:M** slider back to **1.00**
+
+6. Find the **FB** (feedback) slider. Move it to **0.50**
+7. Verify:
+   - ✅ Label shows `0.50`
+   - ✅ No JS errors
+
+8. Move **FB** slider back to **0.00**
+
+9. Switch preset to **Otamatone**, then move **C:M** to **2.00** and **FB** to **0.30**
+10. Verify:
+    - ✅ No JS errors — feedback path rewired correctly after preset switch
+
+---
+
+### Step 9: Check for console errors
 
 Call `mcp__claude-in-chrome__read_console_messages` with `pattern: "error|Error|EXCEPTION|Fatal|NameError|TypeError"`.
 
@@ -148,13 +186,14 @@ After all steps, output a summary table:
 | 1 | Server running | ✅ |
 | 2 | Page loaded | ✅ |
 | 3 | Ruby VM ready | ✅ |
-| 4 | Cockpit UI layout | ✅ |
+| 4 | Cockpit UI layout (incl. FM:/C:M/FB) | ✅ |
 | 5 | Init Audio + graph | ✅ |
 | 6 | Preset buttons (4/4) | ✅ |
-| 7 | Test Mode sensor simulation | ✅ |
-| 8 | No console errors | ✅ |
+| 7 | Test Mode sensor simulation + FM depth | ✅ |
+| 8 | C:M ratio + FB sliders | ✅ |
+| 9 | No console errors | ✅ |
 
-**PASSED 8/8** ピョン。
+**PASSED 9/9** ピョン。
 ```
 
 If any check failed, include the failure detail below the table.
