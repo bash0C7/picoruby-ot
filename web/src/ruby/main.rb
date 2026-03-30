@@ -119,6 +119,7 @@ class SynthApp
     when "midi_max"    then @mapper.set_midi_range(@mapper.midi_min, value.to_i)
     when "accel_scale" then @mapper.accel_scale = value.to_f
     when "cm_ratio"    then @cm_ratio = value.to_f
+    when "feedback"    then @adapter&.set_feedback(value.to_f)
     else
       # ノードパラメータ (例: "filter:cutoff", "master:gain")
       parts = key.split(":")

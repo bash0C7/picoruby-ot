@@ -20,6 +20,7 @@ class SynthPatch
       @release_osc        = nil
       @release_gain_node  = nil
       @release_gain_param = nil
+      @fb_gain_param = nil
     end
 
     def init_audio
@@ -45,6 +46,7 @@ class SynthPatch
       spec = JSON.parse(json_spec)
       build_nodes(spec)
       connect_nodes(spec)
+      setup_feedback
       cache_audio_params
     end
 
@@ -88,6 +90,11 @@ class SynthPatch
       now = @ctx[:currentTime].to_f
       @master_gain_param.cancelAndHoldAtTime(now)
       @master_gain_param.setTargetAtTime(target.to_f, now, [smoothing.to_f, 0.001].max)
+    end
+
+    def set_feedback(amount)
+      return unless @ctx
+      JS.global._setFeedbackAmount(amount.to_f)
     end
 
     def update_param(node_name, param, value)
@@ -152,6 +159,9 @@ class SynthPatch
       @mod_freq_param     = mod     && mod[:osc]     ? mod[:osc][:frequency]     : nil
       @mod_gain_param     = mod     && mod[:gain]    ? mod[:gain][:gain]         : nil
       @master_gain_param  = master  && master[:gain_node] ? master[:gain_node][:gain] : nil
+      fb = @nodes[:_fb_gain]
+      @fb_gain_param = fb && fb[:gain_node] ? fb[:gain_node][:gain] : nil
+      JS.global[:_fbGainParam] = @fb_gain_param
       # JSヘルパー用に公開 (プリセット切替時も更新)
       JS.global[:_carrierFreqParam] = @carrier_freq_param
       JS.global[:_modFreqParam]     = @mod_freq_param
@@ -166,6 +176,7 @@ class SynthPatch
       @mod_freq_param     = nil
       @mod_gain_param     = nil
       @master_gain_param  = nil
+      @fb_gain_param      = nil
       @nodes.each_value do |n|
         n.each_value do |web_node|
           next unless web_node.respond_to?(:disconnect)
@@ -250,6 +261,21 @@ class SynthPatch
         out = get_output(output_node)
         out.connect(@analyser) if out
       end
+    end
+
+    # フィードバックパス構築 — mod_osc.gain → fb_gain → fb_delay(3ms) → mod_osc.frequency
+    def setup_feedback
+      mod = @nodes[:fm_mod]
+      return unless mod && mod[:gain] && mod[:osc]
+      fb_delay = @ctx.createDelay(0.1)
+      fb_delay[:delayTime][:value] = 0.003
+      fb_gain = @ctx.createGain
+      fb_gain[:gain][:value] = 0.0
+      mod[:gain].connect(fb_gain)
+      fb_gain.connect(fb_delay)
+      fb_delay.connect(mod[:osc][:frequency])
+      @nodes[:_fb_gain]  = { gain_node: fb_gain }
+      @nodes[:_fb_delay] = { delay_node: fb_delay }
     end
 
     # 出力端子取得
