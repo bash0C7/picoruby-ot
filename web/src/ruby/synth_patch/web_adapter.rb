@@ -121,6 +121,36 @@ class SynthPatch
       when "amp"
         g = node[:gain]
         g[:gain].setTargetAtTime(value.to_f, now, 0.01) if g
+      when "fx_type"
+        @fx_type = value.to_s
+        apply_fx_gains(node, @fx_type, @fx_mix)
+      when "mix"
+        @fx_mix = value.to_f
+        apply_fx_gains(node, @fx_type, @fx_mix)
+      when "delay_time"
+        node[:delay_node][:delayTime].setTargetAtTime(value.to_f, now, 0.01) if node[:delay_node]
+      when "feedback"
+        node[:fb_gain][:gain].setTargetAtTime(value.to_f, now, 0.01) if node[:fb_gain]
+      when "decay"
+        if node[:convolver]
+          begin
+            ir = JS.global._createReverbIR(value.to_f)
+            node[:convolver][:buffer] = ir
+          rescue
+            nil
+          end
+        end
+      when "drive"
+        if node[:waveshaper]
+          begin
+            curve = JS.global._createDistortionCurve(value.to_f)
+            node[:waveshaper][:curve] = curve
+          rescue
+            nil
+          end
+        end
+      when "tone"
+        node[:tone_filter][:frequency].setTargetAtTime(value.to_f, now, 0.01) if node[:tone_filter]
       end
     end
 
@@ -331,6 +361,27 @@ class SynthPatch
       if output_node && @analyser
         out = get_output(output_node)
         out.connect(@analyser) if out
+      end
+    end
+
+    # FXゲイン切替 (全wet=0後、指定タイプのみmixを適用)
+    def apply_fx_gains(node, fx_type, mix)
+      return unless node
+      now = @ctx[:currentTime].to_f
+      tc  = 0.01
+      mix_f = mix.to_f.clamp(0.0, 1.0)
+      dry = fx_type == "none" ? 1.0 : (1.0 - mix_f)
+      node[:dry_gain][:gain].setTargetAtTime(dry, now, tc)    if node[:dry_gain]
+      node[:echo_wet][:gain].setTargetAtTime(0.0, now, tc)    if node[:echo_wet]
+      node[:reverb_wet][:gain].setTargetAtTime(0.0, now, tc)  if node[:reverb_wet]
+      node[:dist_wet][:gain].setTargetAtTime(0.0, now, tc)    if node[:dist_wet]
+      case fx_type
+      when "echo"
+        node[:echo_wet][:gain].setTargetAtTime(mix_f, now, tc)   if node[:echo_wet]
+      when "reverb"
+        node[:reverb_wet][:gain].setTargetAtTime(mix_f, now, tc) if node[:reverb_wet]
+      when "distortion"
+        node[:dist_wet][:gain].setTargetAtTime(mix_f, now, tc)   if node[:dist_wet]
       end
     end
 
