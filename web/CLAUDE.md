@@ -65,15 +65,15 @@ Serial Port --JS async--> rubySerialOnReceive
 
 ### Core: setTargetAtTime with TC ≈ frame period
 
-Serial frame rate is ~20fps (50ms interval). Glide time constant (TC) must be close to the frame period for smooth inter-frame interpolation:
+Serial frame rate is ~40fps (~25ms interval) — VL53L0X hardware measurement cycle drives the loop, no artificial sleep. Glide time constant (TC) must be close to the frame period for smooth inter-frame interpolation:
 
 | TC | Effect |
 |----|--------|
-| 5-10ms | TC << frame period → snaps to each frame's value, holds → choppy 50ms steps |
-| **40ms** | TC ≈ frame period → exponential curve from each frame overlaps the next → smooth portamento |
-| 100ms+ | TC >> frame period → significant lag behind hand position |
+| 5ms | TC << frame period → snaps to each frame's value → choppy steps |
+| **20ms** | TC ≈ frame period → exponential curve from each frame overlaps the next → smooth portamento |
+| 60ms+ | TC >> frame period → significant lag behind hand position |
 
-**Default glide: 40ms.**
+**Default glide: 20ms.** TC/frame ratio ≈ 0.8 — this ratio is the portamento invariant.
 
 ### cancelAndHoldAtTime (CRITICAL — never use cancelScheduledValues)
 
