@@ -7,7 +7,7 @@ class SynthApp
     @presets = presets
     @adapter = nil
     @ui = UIController.new
-    @glide_sec = 0.001
+    @glide_sec = 0.005
     @attack = 0.01
     @release = 0.2
     @volume = 0.4
@@ -84,15 +84,15 @@ class SynthApp
   def update(dist_mm, ax, ay, az)
     return unless @adapter
 
-    midi_note = @mapper.distance_to_midi_float(dist_mm).round   # 整数ノートにスナップ
-    freq      = @mapper.note_to_freq(midi_note)
-    fm_depth  = @mapper.accel_to_fm_depth(ax, ay, az)
+    midi_float = @mapper.distance_to_midi_float(dist_mm)   # 連続周波数（スナップなし）
+    freq       = @mapper.note_to_freq(midi_float)
+    fm_depth   = @mapper.accel_to_fm_depth(ax, ay, az)
 
     @adapter.update_freq(freq, @glide_sec)
     @adapter.update_fm_depth(fm_depth)
     # update_gain は on_connect / on_disconnect でのみ呼ぶ (ドローン常時オン)
 
-    note_str = @mapper.note_name(midi_note)
+    note_str = @mapper.note_name(midi_float.round)  # 表示のみ: 最近傍ノート名
     update_sensor_display(dist_mm, ax, ay, az, freq, fm_depth, note_str)
   end
 
