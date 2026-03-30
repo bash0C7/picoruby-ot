@@ -33,6 +33,7 @@ class PresetManager
         carrier.fm(mod)
         syn.mix(carrier, name: :mixer)
            .filter(:lowpass, cutoff: 1200, q: 1.5, name: :filter)
+           .fx(:none, name: :fx)
            .gain(0.4, name: :master)
            .out
       end
@@ -43,6 +44,7 @@ class PresetManager
         carrier.fm(mod)
         syn.mix(carrier, name: :mixer)
            .filter(:lowpass, cutoff: 4000, q: 0.7, name: :filter)
+           .fx(:none, name: :fx)
            .gain(0.4, name: :master)
            .out
       end
@@ -53,6 +55,7 @@ class PresetManager
         carrier.fm(mod)
         syn.mix(carrier, name: :mixer)
            .filter(:lowpass, cutoff: 600, q: 8.0, name: :filter)
+           .fx(:none, name: :fx)
            .gain(0.4, name: :master)
            .out
       end
@@ -63,6 +66,7 @@ class PresetManager
         carrier.fm(mod)
         syn.mix(carrier, name: :mixer)
            .filter(:lowpass, cutoff: 2000, q: 1.0, name: :filter)
+           .fx(:none, name: :fx)
            .gain(0.4, name: :master)
            .out
       end
