@@ -7,7 +7,7 @@ class SynthApp
     @presets = presets
     @adapter = nil
     @ui = UIController.new
-    @glide_sec = 0.01
+    @glide_sec = 0.04
     @attack = 0.01
     @release = 0.3
     @volume = 0.4
@@ -83,20 +83,13 @@ class SynthApp
     JS.global[:console].error("[Ruby on_receive] #{e.class}: #{e.message}")
   end
 
-  # 更新ループ — ドローン常時オン、音程変化時にリリースボイストリガー
+  # 更新ループ — ドローン常時オン、常時フレーム補間
   def update(dist_mm, ax, ay, az)
     return unless @adapter
 
     midi_float = @mapper.distance_to_midi_float(dist_mm)
     freq       = @mapper.note_to_freq(midi_float)
     fm_depth   = @mapper.accel_to_fm_depth(ax, ay, az)
-
-    # 音程変化が0.5半音以上なら前の音のリリースボイスをトリガー
-    if @prev_midi_float && (@prev_midi_float - midi_float).abs > 3.0 && @prev_freq
-      @adapter.trigger_release_voice(@prev_freq, @volume, @release)
-    end
-    @prev_midi_float = midi_float
-    @prev_freq       = freq
 
     @adapter.batch_update(freq, fm_depth, @glide_sec)
     # update_gain は on_connect / on_disconnect でのみ呼ぶ (ドローン常時オン)
