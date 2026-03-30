@@ -7,7 +7,7 @@ class SynthApp
     @presets = presets
     @adapter = nil
     @ui = UIController.new
-    @glide_sec = 0.005
+    @glide_sec = 0.001
     @attack = 0.01
     @release = 0.2
     @volume = 0.4
@@ -84,16 +84,15 @@ class SynthApp
   def update(dist_mm, ax, ay, az)
     return unless @adapter
 
-    midi_float = @mapper.distance_to_midi_float(dist_mm)
-    freq       = @mapper.note_to_freq(midi_float)
-    fm_depth   = @mapper.accel_to_fm_depth(ax, ay, az)
+    midi_note = @mapper.distance_to_midi_float(dist_mm).round   # 整数ノートにスナップ
+    freq      = @mapper.note_to_freq(midi_note)
+    fm_depth  = @mapper.accel_to_fm_depth(ax, ay, az)
 
     @adapter.update_freq(freq, @glide_sec)
     @adapter.update_fm_depth(fm_depth)
     # update_gain は on_connect / on_disconnect でのみ呼ぶ (ドローン常時オン)
 
-    # 表示用: 最近傍のnote名
-    note_str = @mapper.note_name(midi_float.round)
+    note_str = @mapper.note_name(midi_note)
     update_sensor_display(dist_mm, ax, ay, az, freq, fm_depth, note_str)
   end
 
@@ -190,6 +189,7 @@ class SynthApp
 
   # センサーUI更新
   def update_sensor_display(dist, ax, ay, az, freq, fm_depth, note_str)
+    return unless @el_note
     begin; @el_note[:textContent] = note_str;          rescue JS::Error; end
     begin; @el_freq[:textContent] = "#{freq.to_i}Hz";  rescue JS::Error; end
     begin; @el_dist[:textContent] = "#{dist}mm";       rescue JS::Error; end
@@ -217,6 +217,7 @@ class SynthApp
 
   # シリアルモニターUI更新
   def update_serial_monitor(line)
+    return unless @el_serial
     @serial_monitor_text = (line + "\n" + @serial_monitor_text)[0, 2000]
     begin
       @el_serial[:textContent] = @serial_monitor_text
