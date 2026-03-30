@@ -83,11 +83,17 @@ class SensorInstrument
       @prev_distance = @distance
     end
 
-    # milliG整数化。浮動小数点を避けてPicoRubyメモリを節約
-    raw = @accel_sensor.acceleration
-    @ax = ((raw[:x] - @accel_baseline_x) * 1000).to_i
-    @ay = ((raw[:y] - @accel_baseline_y) * 1000).to_i
-    @az = ((raw[:z] - @accel_baseline_z) * 1000).to_i
+    # sound_onのときのみ加速度読み取り。offは固定値0でI2C節約
+    if @sound_on
+      raw = @accel_sensor.acceleration
+      @ax = ((raw[:x] - @accel_baseline_x) * 1000).to_i
+      @ay = ((raw[:y] - @accel_baseline_y) * 1000).to_i
+      @az = ((raw[:z] - @accel_baseline_z) * 1000).to_i
+    else
+      @ax = 0
+      @ay = 0
+      @az = 0
+    end
   end
 
   def send_frame
