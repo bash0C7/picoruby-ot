@@ -49,9 +49,9 @@ class SynthPatch
     end
 
     # フレーム毎一括更新 (freq + FM depth を1回のJS呼び出しで処理)
-    def batch_update(freq, fm_depth, glide_sec, target_gain, gain_tc)
+    def batch_update(carrier_freq, mod_freq, fm_depth, glide_sec, target_gain, gain_tc)
       return unless @ctx
-      JS.global._audioParamBatchUpdate(freq.to_f, (fm_depth.to_f * @fm_depth_scale).to_f, glide_sec.to_f, target_gain.to_f, gain_tc.to_f)
+      JS.global._audioParamBatchUpdate(carrier_freq.to_f, mod_freq.to_f, (fm_depth.to_f * @fm_depth_scale).to_f, glide_sec.to_f, target_gain.to_f, gain_tc.to_f)
     end
 
     def update_freq(freq, glide_sec)

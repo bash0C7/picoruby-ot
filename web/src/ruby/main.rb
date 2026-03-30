@@ -12,6 +12,7 @@ class SynthApp
     @release = 0.3
     @volume = 0.4
     @mute_dist = nil
+    @cm_ratio = 1.0
     @serial_monitor_text = ""
     # DOM要素キャッシュ (毎フレームquerySelector回避)
     @el_note   = nil
@@ -93,7 +94,8 @@ class SynthApp
 
     @mute_dist = @mute_dist ? @mute_dist * 0.7 + dist_mm * 0.3 : dist_mm.to_f
     gain = @mute_dist < 25 ? 0.0 : @volume
-    @adapter.batch_update(freq, fm_depth, @glide_sec, gain, @release)
+    mod_freq = freq * @cm_ratio
+    @adapter.batch_update(freq, mod_freq, fm_depth, @glide_sec, gain, @release)
 
     note_str = @mapper.note_name(midi_float.round)  # 表示のみ: 最近傍ノート名
     update_sensor_display(dist_mm, ax, ay, az, freq, fm_depth, note_str)
@@ -116,6 +118,7 @@ class SynthApp
     when "midi_min"    then @mapper.set_midi_range(value.to_i, @mapper.midi_max)
     when "midi_max"    then @mapper.set_midi_range(@mapper.midi_min, value.to_i)
     when "accel_scale" then @mapper.accel_scale = value.to_f
+    when "cm_ratio"    then @cm_ratio = value.to_f
     else
       # ノードパラメータ (例: "filter:cutoff", "master:gain")
       parts = key.split(":")
