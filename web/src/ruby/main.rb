@@ -9,8 +9,11 @@ class SynthApp
     @ui = UIController.new
     @glide_sec = 0.005
     @attack = 0.01
-    @release = 0.2
+    @release = 0.4
     @volume = 0.4
+    # リリースボイス用: 前フレームの音程・周波数
+    @prev_midi_float = nil
+    @prev_freq       = nil
     @serial_monitor_text = ""
     # DOM要素キャッシュ (毎フレームquerySelector回避)
     @el_note   = nil
@@ -80,13 +83,20 @@ class SynthApp
     JS.global[:console].error("[Ruby on_receive] #{e.class}: #{e.message}")
   end
 
-  # ステートレス更新 — ドローン常時オン、分岐なし
+  # 更新ループ — ドローン常時オン、音程変化時にリリースボイストリガー
   def update(dist_mm, ax, ay, az)
     return unless @adapter
 
-    midi_float = @mapper.distance_to_midi_float(dist_mm)   # 連続周波数（スナップなし）
+    midi_float = @mapper.distance_to_midi_float(dist_mm)
     freq       = @mapper.note_to_freq(midi_float)
     fm_depth   = @mapper.accel_to_fm_depth(ax, ay, az)
+
+    # 音程変化が0.5半音以上なら前の音のリリースボイスをトリガー
+    if @prev_midi_float && (@prev_midi_float - midi_float).abs > 0.5 && @prev_freq
+      @adapter.trigger_release_voice(@prev_freq, @volume, @release)
+    end
+    @prev_midi_float = midi_float
+    @prev_freq       = freq
 
     @adapter.update_freq(freq, @glide_sec)
     @adapter.update_fm_depth(fm_depth)

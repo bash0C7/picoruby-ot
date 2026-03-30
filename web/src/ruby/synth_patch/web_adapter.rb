@@ -16,6 +16,10 @@ class SynthPatch
       @mod_freq_param     = nil
       @mod_gain_param     = nil
       @master_gain_param  = nil
+      # リリースボイス (バイオリンレガート用)
+      @release_osc        = nil
+      @release_gain_node  = nil
+      @release_gain_param = nil
     end
 
     def init_audio
@@ -26,6 +30,7 @@ class SynthPatch
       # JS描画ループ用にグローバル公開
       JS.global[:analyser] = @analyser
       JS.global[:analyserData] = JS.global[:Float32Array].new(2048)
+      init_release_voice
     end
 
     def audio_context
@@ -44,15 +49,25 @@ class SynthPatch
     def update_freq(freq, glide_sec)
       return unless @ctx
       now = @ctx[:currentTime].to_f
-      tc  = [glide_sec.to_f, 0.001].max
+      # 瞬時スナップ (glide_sec引数は互換性のため残すが不使用)
       if @carrier_freq_param
         @carrier_freq_param.cancelAndHoldAtTime(now)
-        @carrier_freq_param.setTargetAtTime(freq.to_f, now, tc)
+        @carrier_freq_param.setValueAtTime(freq.to_f, now)
       end
       if @mod_freq_param
         @mod_freq_param.cancelAndHoldAtTime(now)
-        @mod_freq_param.setTargetAtTime(freq.to_f, now, tc)
+        @mod_freq_param.setValueAtTime(freq.to_f, now)
       end
+    end
+
+    # リリースボイストリガー (前の音をフェードアウト)
+    def trigger_release_voice(old_freq, volume, release_tc)
+      return unless @ctx && @release_gain_param
+      now = @ctx[:currentTime].to_f
+      @release_osc[:frequency][:value] = old_freq.to_f
+      @release_gain_param.cancelAndHoldAtTime(now)
+      @release_gain_param.setValueAtTime(volume.to_f * 0.4, now)
+      @release_gain_param.setTargetAtTime(0.0, now, [release_tc.to_f, 0.05].max)
     end
 
     def update_fm_depth(depth)
@@ -107,6 +122,19 @@ class SynthPatch
     end
 
     private
+
+    # リリースボイス初期化 (sine oscillator + ゲインノード)
+    def init_release_voice
+      return unless @ctx && @analyser
+      @release_osc = @ctx.createOscillator
+      @release_osc[:type] = "sine"
+      @release_gain_node = @ctx.createGain
+      @release_gain_node[:gain][:value] = 0.0
+      @release_gain_param = @release_gain_node[:gain]
+      @release_osc.connect(@release_gain_node)
+      @release_gain_node.connect(@analyser)
+      @release_osc.start
+    end
 
     # AudioParamキャッシュ更新
     def cache_audio_params
