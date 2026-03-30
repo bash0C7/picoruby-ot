@@ -262,6 +262,11 @@ class SynthApp
         end
       rescue JS::Error
       end
+      row = JS.global[:document].querySelector("#fx-#{t}-params")
+      begin
+        row[:style][:display] = (t == type && t != "none") ? "" : "none"
+      rescue JS::Error
+      end
     end
   end
 
