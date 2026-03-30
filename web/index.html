@@ -663,11 +663,16 @@ async function readLoop() {
 // Audio init (requires user gesture)
 // ============================================================
 document.getElementById('btn-init-audio').addEventListener('click', () => {
+  const btn = document.getElementById('btn-init-audio');
+  if (btn.textContent === 'Audio Ready') {
+    location.reload();
+    return;
+  }
   if (window.rubyInitAudio) {
     window.rubyInitAudio();
-    document.getElementById('btn-init-audio').textContent = 'Audio Ready';
-    document.getElementById('btn-init-audio').style.borderColor = '#4caf50';
-    document.getElementById('btn-init-audio').style.color = '#4caf50';
+    btn.textContent = 'Audio Ready';
+    btn.style.borderColor = '#4caf50';
+    btn.style.color = '#4caf50';
   }
 });
 
