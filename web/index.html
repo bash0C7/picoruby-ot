@@ -664,6 +664,22 @@ document.getElementById('btn-disconnect').addEventListener('click', async () => 
   } catch (e) { console.error('Serial disconnect:', e); }
 });
 
+function notifyWasmCrash(msg) {
+  document.body.style.background = '#3a0000';
+  var el = document.getElementById('serial-status');
+  if (el) { el.textContent = '☠'; el.style.color = '#ff4444'; el.style.fontSize = '28px'; }
+  var mem = document.getElementById('mem-display');
+  if (mem) mem.style.color = '#ff6666';
+  var banner = document.getElementById('wasm-crash-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'wasm-crash-banner';
+    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;padding:8px 16px;background:#ff2222;color:#fff;font-weight:bold;font-size:14px;z-index:9999;text-align:center;';
+    document.body.prepend(banner);
+  }
+  banner.textContent = '⚠ WASM crash: ' + msg + ' — リロードしてください (Reload)';
+}
+
 async function readLoop() {
   while (serialReader) {
     try {
@@ -672,10 +688,19 @@ async function readLoop() {
       if (value && window.rubySerialOnReceive) window.rubySerialOnReceive(value);
     } catch (e) {
       console.error('[Serial readLoop]', e.message);
+      if (e.message && e.message.includes('offset')) notifyWasmCrash(e.message);
       break;
     }
   }
 }
+
+window.addEventListener('error', function(e) {
+  if (e.message && e.message.includes('offset')) notifyWasmCrash(e.message);
+});
+window.addEventListener('unhandledrejection', function(e) {
+  var msg = e.reason && e.reason.message ? e.reason.message : String(e.reason);
+  if (msg.includes('offset')) notifyWasmCrash(msg);
+});
 
 // ============================================================
 // Memory monitor (10s interval)
