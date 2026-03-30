@@ -7,9 +7,9 @@ class SynthApp
     @presets = presets
     @adapter = nil
     @ui = UIController.new
-    @glide_sec = 0.02
+    @glide_sec = 0.01
     @attack = 0.01
-    @release = 0.4
+    @release = 0.3
     @volume = 0.4
     # リリースボイス用: 前フレームの音程・周波数
     @prev_midi_float = nil
@@ -92,7 +92,7 @@ class SynthApp
     fm_depth   = @mapper.accel_to_fm_depth(ax, ay, az)
 
     # 音程変化が0.5半音以上なら前の音のリリースボイスをトリガー
-    if @prev_midi_float && (@prev_midi_float - midi_float).abs > 0.5 && @prev_freq
+    if @prev_midi_float && (@prev_midi_float - midi_float).abs > 3.0 && @prev_freq
       @adapter.trigger_release_voice(@prev_freq, @volume, @release)
     end
     @prev_midi_float = midi_float

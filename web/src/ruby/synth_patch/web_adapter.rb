@@ -66,7 +66,7 @@ class SynthPatch
       now = @ctx[:currentTime].to_f
       @release_osc[:frequency][:value] = old_freq.to_f
       @release_gain_param.cancelAndHoldAtTime(now)
-      @release_gain_param.setValueAtTime(volume.to_f * 0.4, now)
+      @release_gain_param.setValueAtTime(volume.to_f * 0.15, now)
       @release_gain_param.setTargetAtTime(0.0, now, [release_tc.to_f, 0.05].max)
     end
 
