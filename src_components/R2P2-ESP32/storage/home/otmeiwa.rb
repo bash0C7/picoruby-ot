@@ -20,15 +20,9 @@ class SensorLEDVisualizer
   end
 
   def update(distance, ax, ay, az, sound_on)
-    if sound_on
-      hue        = ((distance - DIST_MIN) * 384 / (DIST_MAX - DIST_MIN)).clamp(0, 383)
-      saturation = 220
-      brightness = 150
-    else
-      hue        = 0
-      saturation = 0
-      brightness = 20
-    end
+    hue        = ((distance - DIST_MIN) * 384 / (DIST_MAX - DIST_MIN)).clamp(0, 383)
+    saturation = 220
+    brightness = sound_on ? 150 : 60
 
     LED_COUNT.times do |i|
       @led_colors[i] = (hue << 16) | (saturation << 8) | brightness
@@ -61,6 +55,10 @@ class SensorInstrument
     @accel_baseline_y = 0
     @accel_baseline_z = 0
     @sound_on = false
+    # オフ時に送る固定値キャッシュ
+    @cached_ax = 0
+    @cached_ay = 0
+    @cached_az = 0
   end
 
   def toggle_sound
@@ -83,16 +81,19 @@ class SensorInstrument
       @prev_distance = @distance
     end
 
-    # sound_onのときのみ加速度読み取り。offは固定値0でI2C節約
+    # sound_onのときのみ加速度読み取り。offはキャッシュ値でI2C節約
     if @sound_on
       raw = @accel_sensor.acceleration
       @ax = ((raw[:x] - @accel_baseline_x) * 1000).to_i
       @ay = ((raw[:y] - @accel_baseline_y) * 1000).to_i
       @az = ((raw[:z] - @accel_baseline_z) * 1000).to_i
+      @cached_ax = @ax
+      @cached_ay = @ay
+      @cached_az = @az
     else
-      @ax = 0
-      @ay = 0
-      @az = 0
+      @ax = @cached_ax
+      @ay = @cached_ay
+      @az = @cached_az
     end
   end
 
