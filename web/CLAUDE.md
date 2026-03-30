@@ -92,13 +92,13 @@ Every ruby.wasm JS interop call creates a JS::Object in the WASM heap. To reduce
 per-frame allocations to one call, freq + FM depth + master gain updates are delegated to a JS helper:
 
 ```js
-window._audioParamBatchUpdate = function(freq, fmDepthScaled, glide, targetGain, gainTc) {
+window._audioParamBatchUpdate = function(carrierFreq, modFreq, fmDepthScaled, glide, targetGain, gainTc) {
   var now = ctx.currentTime;
   var tc = glide > 0.001 ? glide : 0.001;
   _carrierFreqParam.cancelAndHoldAtTime(now);
-  _carrierFreqParam.setTargetAtTime(freq, now, tc);
+  _carrierFreqParam.setTargetAtTime(carrierFreq, now, tc);
   _modFreqParam.cancelAndHoldAtTime(now);
-  _modFreqParam.setTargetAtTime(freq, now, tc);
+  _modFreqParam.setTargetAtTime(modFreq, now, tc);  // independent: modFreq = carrierFreq * cm_ratio
   _modGainParam.cancelAndHoldAtTime(now);
   _modGainParam.setTargetAtTime(fmDepthScaled, now, 0.01);
   _masterGainParam.cancelAndHoldAtTime(now);
@@ -108,12 +108,11 @@ window._audioParamBatchUpdate = function(freq, fmDepthScaled, glide, targetGain,
 
 Ruby side calls once per frame:
 ```ruby
-@mute_dist = @mute_dist ? @mute_dist * 0.7 + dist_mm * 0.3 : dist_mm.to_f
-gain = @mute_dist < 25 ? 0.0 : @volume
-@adapter.batch_update(freq, fm_depth, @glide_sec, gain, @release)
+mod_freq = freq * @cm_ratio
+@adapter.batch_update(freq, mod_freq, fm_depth, @glide_sec, gain, @release)
 ```
 
-AudioParam references (`_carrierFreqParam`, `_modFreqParam`, `_modGainParam`, `_masterGainParam`)
+AudioParam references (`_carrierFreqParam`, `_modFreqParam`, `_modGainParam`, `_masterGainParam`, `_fbGainParam`)
 are cached in `cache_audio_params` after `build_graph` and re-exposed to JS globals on preset switch.
 
 ## Stateless Update Loop
@@ -126,7 +125,8 @@ def update(dist_mm, ax, ay, az)
   fm_depth   = @mapper.accel_to_fm_depth(ax, ay, az)
   @mute_dist = @mute_dist ? @mute_dist * 0.7 + dist_mm * 0.3 : dist_mm.to_f
   gain       = @mute_dist < 25 ? 0.0 : @volume
-  @adapter.batch_update(freq, fm_depth, @glide_sec, gain, @release)
+  mod_freq = freq * @cm_ratio
+  @adapter.batch_update(freq, mod_freq, fm_depth, @glide_sec, gain, @release)
   note_str = @mapper.note_name(midi_float.round)
   update_sensor_display(dist_mm, ax, ay, az, freq, fm_depth, note_str)
 end
