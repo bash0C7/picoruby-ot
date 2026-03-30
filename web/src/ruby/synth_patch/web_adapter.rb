@@ -49,14 +49,14 @@ class SynthPatch
     def update_freq(freq, glide_sec)
       return unless @ctx
       now = @ctx[:currentTime].to_f
-      # 瞬時スナップ (glide_sec引数は互換性のため残すが不使用)
+      tc  = [glide_sec.to_f, 0.001].max
       if @carrier_freq_param
         @carrier_freq_param.cancelAndHoldAtTime(now)
-        @carrier_freq_param.setValueAtTime(freq.to_f, now)
+        @carrier_freq_param.setTargetAtTime(freq.to_f, now, tc)
       end
       if @mod_freq_param
         @mod_freq_param.cancelAndHoldAtTime(now)
-        @mod_freq_param.setValueAtTime(freq.to_f, now)
+        @mod_freq_param.setTargetAtTime(freq.to_f, now, tc)
       end
     end
 

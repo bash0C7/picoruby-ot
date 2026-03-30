@@ -7,7 +7,7 @@ class SynthApp
     @presets = presets
     @adapter = nil
     @ui = UIController.new
-    @glide_sec = 0.005
+    @glide_sec = 0.02
     @attack = 0.01
     @release = 0.4
     @volume = 0.4
