@@ -71,3 +71,29 @@ patch.set_attack(0.05)
 patch.set_release(0.2)
 assert_equal 0.05, patch.attack, "attack set"
 assert_equal 0.2, patch.release, "release set"
+
+group "SynthPatch::FxNode — defaults"
+
+node = SynthPatch::FxNode.new(:none, name: :fx)
+assert_equal :none, node.fx_type, "fx_type"
+assert_in_delta(0.5, node.mix, 0.001, "mix default")
+assert_in_delta(0.2, node.delay_time, 0.001, "delay_time default")
+assert_in_delta(0.4, node.feedback, 0.001, "feedback default")
+assert_in_delta(2.0, node.decay, 0.001, "decay default")
+assert_equal 50, node.drive, "drive default"
+assert_equal 3000, node.tone, "tone default"
+
+group "SynthPatch::FxNode — to_spec_h"
+
+node = SynthPatch::FxNode.new(:echo, mix: 0.7, delay_time: 0.3, name: :fx)
+spec = node.to_spec_h
+assert_equal "fx", spec[:type], "spec type"
+assert_equal "fx", spec[:id], "spec id"
+assert_equal "echo", spec[:params][:fx_type], "params fx_type"
+assert_in_delta(0.7, spec[:params][:mix], 0.001, "params mix")
+assert_in_delta(0.3, spec[:params][:delay_time], 0.001, "params delay_time")
+
+group "SynthPatch::FxNode — status_line"
+
+node = SynthPatch::FxNode.new(:reverb, mix: 0.5, name: :fx)
+assert(node.status_line.include?("reverb"), "status includes type")
