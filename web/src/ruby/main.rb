@@ -12,6 +12,11 @@ class SynthApp
     @release = 0.2
     @volume = 0.4
     @serial_monitor_text = ""
+    # DOM要素キャッシュ (毎フレームquerySelector回避)
+    @el_note   = nil
+    @el_freq   = nil
+    @el_dist   = nil
+    @el_serial = nil
   end
 
   def init_audio
@@ -24,6 +29,11 @@ class SynthApp
     @ui.start_animation(@adapter.analyser)
     # アクセルカーブ描画
     @ui.draw_curve("#accel-curve-canvas", :linear)
+    # DOM要素キャッシュ初期化
+    @el_note   = JS.global[:document].querySelector("#note-display")
+    @el_freq   = JS.global[:document].querySelector("#freq-display")
+    @el_dist   = JS.global[:document].querySelector("#dist-display")
+    @el_serial = JS.global[:document].querySelector("#serial-monitor")
     JS.global[:console].log("[Ruby] Audio initialized")
   end
 
@@ -65,16 +75,16 @@ class SynthApp
   def update(dist_mm, ax, ay, az)
     return unless @adapter
 
-    note = @mapper.distance_to_note(dist_mm)
-    freq = @mapper.note_to_freq(note)
-    fm_depth = @mapper.accel_to_fm_depth(ax, ay, az)
+    midi_float = @mapper.distance_to_midi_float(dist_mm)
+    freq       = @mapper.note_to_freq(midi_float)
+    fm_depth   = @mapper.accel_to_fm_depth(ax, ay, az)
 
-    @adapter.update_freq(freq.to_f, @glide_sec)
+    @adapter.update_freq(freq, @glide_sec)
     @adapter.update_fm_depth(fm_depth)
     # update_gain は on_connect / on_disconnect でのみ呼ぶ (ドローン常時オン)
 
-    # センサー表示更新
-    note_str = @mapper.note_name(note)
+    # 表示用: 最近傍のnote名
+    note_str = @mapper.note_name(midi_float.round)
     update_sensor_display(dist_mm, ax, ay, az, freq, fm_depth, note_str)
   end
 
@@ -171,9 +181,9 @@ class SynthApp
 
   # センサーUI更新
   def update_sensor_display(dist, ax, ay, az, freq, fm_depth, note_str)
-    set_text("#note-display", note_str)
-    set_text("#freq-display", "#{freq}Hz")
-    set_text("#dist-display", "#{dist}mm")
+    begin; @el_note[:textContent] = note_str;          rescue JS::Error; end
+    begin; @el_freq[:textContent] = "#{freq.to_i}Hz";  rescue JS::Error; end
+    begin; @el_dist[:textContent] = "#{dist}mm";       rescue JS::Error; end
   end
 
   # JS null安全なテキスト設定
@@ -199,9 +209,8 @@ class SynthApp
   # シリアルモニターUI更新
   def update_serial_monitor(line)
     @serial_monitor_text = (line + "\n" + @serial_monitor_text)[0, 2000]
-    el = JS.global[:document].querySelector("#serial-monitor")
     begin
-      el[:textContent] = @serial_monitor_text
+      @el_serial[:textContent] = @serial_monitor_text
     rescue JS::Error
     end
   end

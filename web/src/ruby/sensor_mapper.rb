@@ -41,17 +41,16 @@ class SensorMapper
     @transpose = (@transpose - 12).clamp(-24, 24)
   end
 
-  # クロマチック線形マッピング（スナップなし）
-  def distance_to_note(dist_mm)
+  # 連続MIDIノート値 (float, スナップなし)
+  def distance_to_midi_float(dist_mm)
     clamped = dist_mm.clamp(@dist_min, @dist_max)
-    ratio = (clamped - @dist_min).to_f / (@dist_max - @dist_min)
-    raw = @midi_min + (ratio * (@midi_max - @midi_min)).round
-    raw.clamp(@midi_min, @midi_max) + @transpose
+    ratio   = (clamped - @dist_min).to_f / (@dist_max - @dist_min)
+    @midi_min + ratio * (@midi_max - @midi_min) + @transpose
   end
 
   # equal temperament: MIDI 69 = A3 = 440Hz, semitone = 2^(1/12)
   def note_to_freq(midi_note)
-    (440.0 * (2.0 ** ((midi_note - 69).to_f / 12.0))).to_i
+    440.0 * (2.0 ** ((midi_note.to_f - 69.0) / 12.0))
   end
 
   # A3 = 440Hz 表記 (MIDI 69 → "A3")

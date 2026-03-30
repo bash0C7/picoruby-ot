@@ -13,9 +13,10 @@ assert_equal 500.0, m.accel_scale, "default accel_scale"
 group "SensorMapper#note_to_freq"
 
 m = SensorMapper.new
-assert_equal 440, m.note_to_freq(69), "A3 = 440Hz (integer)"
-assert_equal 261, m.note_to_freq(60), "C3 = 261Hz (truncated)"
-assert_equal 880, m.note_to_freq(81), "A4 = 880Hz"
+assert_in_delta(440.0, m.note_to_freq(69), 0.5, "A3 = 440Hz")
+assert_in_delta(261.6, m.note_to_freq(60), 1.0, "C3 ~ 261.6Hz")
+assert_in_delta(880.0, m.note_to_freq(81), 0.5, "A4 = 880Hz")
+assert_in_delta(440.0, m.note_to_freq(69.0), 0.5, "A3 float = 440Hz")
 
 group "SensorMapper#note_name"
 
@@ -26,21 +27,21 @@ assert_equal "C1", m.note_name(36), "MIDI 36 = C1"
 assert_equal "Bb3", m.note_name(70), "MIDI 70 = Bb3 (mixed notation)"
 assert_equal "Eb3", m.note_name(63), "MIDI 63 = Eb3 (mixed notation)"
 
-group "SensorMapper#distance_to_note — chromatic linear"
+group "SensorMapper#distance_to_midi_float — chromatic linear"
 
 m = SensorMapper.new
-note_min = m.distance_to_note(20)
-note_max = m.distance_to_note(900)
-assert_equal 36, note_min, "dist_min → midi_min"
-assert_equal 84, note_max, "dist_max → midi_max"
+note_min = m.distance_to_midi_float(20)
+note_max = m.distance_to_midi_float(900)
+assert_in_delta(36.0, note_min, 0.001, "dist_min → midi_min float")
+assert_in_delta(84.0, note_max, 0.001, "dist_max → midi_max float")
 
-group "SensorMapper#distance_to_note — clamping"
+group "SensorMapper#distance_to_midi_float — clamping"
 
 m = SensorMapper.new
-note_below = m.distance_to_note(0)
-note_above = m.distance_to_note(2000)
-assert_equal 36, note_below, "below dist_min → midi_min"
-assert_equal 84, note_above, "above dist_max → midi_max"
+note_below = m.distance_to_midi_float(0)
+note_above = m.distance_to_midi_float(2000)
+assert_in_delta(36.0, note_below, 0.001, "below dist_min → midi_min float")
+assert_in_delta(84.0, note_above, 0.001, "above dist_max → midi_max float")
 
 group "SensorMapper#accel_to_fm_depth"
 
@@ -145,13 +146,13 @@ assert_equal 12, m.transpose, "transpose_down → +12"
 4.times { m.transpose_down }
 assert_equal(-24, m.transpose, "clamped at -24")
 
-group "SensorMapper#distance_to_note — with transpose"
+group "SensorMapper#distance_to_midi_float — with transpose"
 
 m = SensorMapper.new
-base_note = m.distance_to_note(460)
+base_note = m.distance_to_midi_float(460)
 m.transpose_up
-transposed_note = m.distance_to_note(460)
-assert_equal base_note + 12, transposed_note, "transpose +12 applied"
+transposed_note = m.distance_to_midi_float(460)
+assert_in_delta(base_note + 12.0, transposed_note, 0.001, "transpose +12 applied")
 
 group "SensorMapper#note_name — mixed notation"
 

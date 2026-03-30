@@ -11,6 +11,11 @@ class SynthPatch
       @nodes = {}
       @analyser = nil
       @fm_depth_scale = 400
+      # AudioParamキャッシュ (毎フレームJS::Object生成回避)
+      @carrier_freq_param = nil
+      @mod_freq_param     = nil
+      @mod_gain_param     = nil
+      @master_gain_param  = nil
     end
 
     def init_audio
@@ -33,41 +38,37 @@ class SynthPatch
       spec = JSON.parse(json_spec)
       build_nodes(spec)
       connect_nodes(spec)
+      cache_audio_params
     end
 
     def update_freq(freq, glide_sec)
       return unless @ctx
       now = @ctx[:currentTime].to_f
-      [:fm_carrier, :fm_mod].each do |id|
-        node = @nodes[id]
-        next unless node
-        osc = node[:osc]
-        next unless osc
-        osc[:frequency].cancelScheduledValues(0)
-        osc[:frequency].setTargetAtTime(freq.to_f, now, [glide_sec.to_f, 0.001].max)
+      tc  = [glide_sec.to_f, 0.001].max
+      if @carrier_freq_param
+        @carrier_freq_param.cancelScheduledValues(0)
+        @carrier_freq_param.setTargetAtTime(freq.to_f, now, tc)
+      end
+      if @mod_freq_param
+        @mod_freq_param.cancelScheduledValues(0)
+        @mod_freq_param.setTargetAtTime(freq.to_f, now, tc)
       end
     end
 
     def update_fm_depth(depth)
       return unless @ctx
+      return unless @mod_gain_param
       now = @ctx[:currentTime].to_f
-      node = @nodes[:fm_mod]
-      return unless node
-      gain = node[:gain]
-      return unless gain
-      gain[:gain].cancelScheduledValues(0)
-      gain[:gain].setTargetAtTime(depth.to_f * @fm_depth_scale, now, 0.01)
+      @mod_gain_param.cancelScheduledValues(0)
+      @mod_gain_param.setTargetAtTime(depth.to_f * @fm_depth_scale, now, 0.01)
     end
 
     def update_gain(target, smoothing)
       return unless @ctx
+      return unless @master_gain_param
       now = @ctx[:currentTime].to_f
-      node = @nodes[:master]
-      return unless node
-      g = node[:gain_node]
-      return unless g
-      g[:gain].cancelScheduledValues(0)
-      g[:gain].setTargetAtTime(target.to_f, now, [smoothing.to_f, 0.001].max)
+      @master_gain_param.cancelScheduledValues(0)
+      @master_gain_param.setTargetAtTime(target.to_f, now, [smoothing.to_f, 0.001].max)
     end
 
     def update_param(node_name, param, value)
@@ -107,8 +108,24 @@ class SynthPatch
 
     private
 
+    # AudioParamキャッシュ更新
+    def cache_audio_params
+      carrier = @nodes[:fm_carrier]
+      mod     = @nodes[:fm_mod]
+      master  = @nodes[:master]
+      @carrier_freq_param = carrier && carrier[:osc] ? carrier[:osc][:frequency] : nil
+      @mod_freq_param     = mod     && mod[:osc]     ? mod[:osc][:frequency]     : nil
+      @mod_gain_param     = mod     && mod[:gain]    ? mod[:gain][:gain]         : nil
+      @master_gain_param  = master  && master[:gain_node] ? master[:gain_node][:gain] : nil
+    end
+
     # 全ノード切断
     def disconnect_all
+      # キャッシュクリア
+      @carrier_freq_param = nil
+      @mod_freq_param     = nil
+      @mod_gain_param     = nil
+      @master_gain_param  = nil
       @nodes.each_value do |n|
         n.each_value do |web_node|
           next unless web_node.respond_to?(:disconnect)
