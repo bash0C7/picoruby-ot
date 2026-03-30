@@ -89,10 +89,10 @@ param.cancelScheduledValues(0);
 ### JS Batch Helper (minimize ruby.wasm JS::Object allocations)
 
 Every ruby.wasm JS interop call creates a JS::Object in the WASM heap. To reduce
-per-frame allocations to one call, freq + FM depth updates are delegated to a JS helper:
+per-frame allocations to one call, freq + FM depth + master gain updates are delegated to a JS helper:
 
 ```js
-window._audioParamBatchUpdate = function(freq, fmDepthScaled, glide) {
+window._audioParamBatchUpdate = function(freq, fmDepthScaled, glide, targetGain, gainTc) {
   var now = ctx.currentTime;
   var tc = glide > 0.001 ? glide : 0.001;
   _carrierFreqParam.cancelAndHoldAtTime(now);
@@ -101,16 +101,20 @@ window._audioParamBatchUpdate = function(freq, fmDepthScaled, glide) {
   _modFreqParam.setTargetAtTime(freq, now, tc);
   _modGainParam.cancelAndHoldAtTime(now);
   _modGainParam.setTargetAtTime(fmDepthScaled, now, 0.01);
+  _masterGainParam.cancelAndHoldAtTime(now);
+  _masterGainParam.setTargetAtTime(targetGain, now, gainTc);
 };
 ```
 
 Ruby side calls once per frame:
 ```ruby
-@adapter.batch_update(freq, fm_depth, @glide_sec)
+@mute_dist = @mute_dist ? @mute_dist * 0.7 + dist_mm * 0.3 : dist_mm.to_f
+gain = @mute_dist < 25 ? 0.0 : @volume
+@adapter.batch_update(freq, fm_depth, @glide_sec, gain, @release)
 ```
 
-AudioParam references (`_carrierFreqParam`, `_modFreqParam`, `_modGainParam`) are cached
-in `cache_audio_params` after `build_graph` and re-exposed to JS globals on preset switch.
+AudioParam references (`_carrierFreqParam`, `_modFreqParam`, `_modGainParam`, `_masterGainParam`)
+are cached in `cache_audio_params` after `build_graph` and re-exposed to JS globals on preset switch.
 
 ## Stateless Update Loop
 
@@ -120,14 +124,37 @@ def update(dist_mm, ax, ay, az)
   midi_float = @mapper.distance_to_midi_float(dist_mm)
   freq       = @mapper.note_to_freq(midi_float)
   fm_depth   = @mapper.accel_to_fm_depth(ax, ay, az)
-  @adapter.batch_update(freq, fm_depth, @glide_sec)
-  # update_gain: on_connect/on_disconnect only (drone always on)
+  @mute_dist = @mute_dist ? @mute_dist * 0.7 + dist_mm * 0.3 : dist_mm.to_f
+  gain       = @mute_dist < 25 ? 0.0 : @volume
+  @adapter.batch_update(freq, fm_depth, @glide_sec, gain, @release)
   note_str = @mapper.note_name(midi_float.round)
   update_sensor_display(dist_mm, ax, ay, az, freq, fm_depth, note_str)
 end
 ```
 
-No `@sounding` flag. No `in_range?` check. Gain is set once on connect.
+No `@sounding` flag. No `in_range?` check. Gain controlled every frame via batch_update.
+
+## Near-zero Mute with Chattering Suppression
+
+Drone mutes when distance < 25mm (dead zone / stop gesture).
+
+Raw distance is NOT used directly for the mute threshold — sensor chattering causes
+spurious sub-25mm readings, especially during vigorous playing. Instead, an exponential
+moving average `@mute_dist` low-pass filters the distance signal:
+
+```ruby
+@mute_dist = @mute_dist * 0.7 + dist_mm * 0.3   # α=0.3, history weight=0.7
+gain = @mute_dist < 25 ? 0.0 : @volume
+```
+
+Why exponential smoothing beats a consecutive-frame counter:
+- Micro-movements (always present) produce symmetric noise → average stays at true position
+- Chattering spikes are asymmetric outliers → each spike only moves @mute_dist by 30%
+- Genuine slow approach to 25mm: @mute_dist tracks the hand over ~5 frames (~250ms)
+- Vigorous playing: even 3 consecutive low readings won't push @mute_dist below 25mm
+  if the true average position is far above the threshold
+
+Do NOT replace `@mute_dist` with raw `dist_mm` for gain decisions.
 
 ## Sensor Mapping
 
