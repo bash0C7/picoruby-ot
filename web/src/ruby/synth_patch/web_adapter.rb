@@ -46,11 +46,11 @@ class SynthPatch
       now = @ctx[:currentTime].to_f
       tc  = [glide_sec.to_f, 0.001].max
       if @carrier_freq_param
-        @carrier_freq_param.cancelScheduledValues(0)
+        @carrier_freq_param.cancelAndHoldAtTime(now)
         @carrier_freq_param.setTargetAtTime(freq.to_f, now, tc)
       end
       if @mod_freq_param
-        @mod_freq_param.cancelScheduledValues(0)
+        @mod_freq_param.cancelAndHoldAtTime(now)
         @mod_freq_param.setTargetAtTime(freq.to_f, now, tc)
       end
     end
@@ -59,7 +59,7 @@ class SynthPatch
       return unless @ctx
       return unless @mod_gain_param
       now = @ctx[:currentTime].to_f
-      @mod_gain_param.cancelScheduledValues(0)
+      @mod_gain_param.cancelAndHoldAtTime(now)
       @mod_gain_param.setTargetAtTime(depth.to_f * @fm_depth_scale, now, 0.01)
     end
 
@@ -67,7 +67,7 @@ class SynthPatch
       return unless @ctx
       return unless @master_gain_param
       now = @ctx[:currentTime].to_f
-      @master_gain_param.cancelScheduledValues(0)
+      @master_gain_param.cancelAndHoldAtTime(now)
       @master_gain_param.setTargetAtTime(target.to_f, now, [smoothing.to_f, 0.001].max)
     end
 

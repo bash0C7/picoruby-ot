@@ -6,8 +6,8 @@ group "SensorMapper#initialize"
 m = SensorMapper.new
 assert_equal 20, m.dist_min, "default dist_min"
 assert_equal 900, m.dist_max, "default dist_max"
-assert_equal 36, m.midi_min, "default midi_min"
-assert_equal 84, m.midi_max, "default midi_max"
+assert_equal 48, m.midi_min, "default midi_min"
+assert_equal 72, m.midi_max, "default midi_max"
 assert_equal 500.0, m.accel_scale, "default accel_scale"
 
 group "SensorMapper#note_to_freq"
@@ -32,16 +32,16 @@ group "SensorMapper#distance_to_midi_float — chromatic linear"
 m = SensorMapper.new
 note_min = m.distance_to_midi_float(20)
 note_max = m.distance_to_midi_float(900)
-assert_in_delta(36.0, note_min, 0.001, "dist_min → midi_min float")
-assert_in_delta(84.0, note_max, 0.001, "dist_max → midi_max float")
+assert_in_delta(48.0, note_min, 0.001, "dist_min → midi_min float")
+assert_in_delta(72.0, note_max, 0.001, "dist_max → midi_max float")
 
 group "SensorMapper#distance_to_midi_float — clamping"
 
 m = SensorMapper.new
 note_below = m.distance_to_midi_float(0)
 note_above = m.distance_to_midi_float(2000)
-assert_in_delta(36.0, note_below, 0.001, "below dist_min → midi_min float")
-assert_in_delta(84.0, note_above, 0.001, "above dist_max → midi_max float")
+assert_in_delta(48.0, note_below, 0.001, "below dist_min → midi_min float")
+assert_in_delta(72.0, note_above, 0.001, "above dist_max → midi_max float")
 
 group "SensorMapper#accel_to_fm_depth"
 

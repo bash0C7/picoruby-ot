@@ -1,8 +1,8 @@
 class SensorMapper
   DIST_MIN_DEFAULT = 20
   DIST_MAX_DEFAULT = 900
-  MIDI_MIN_DEFAULT = 36
-  MIDI_MAX_DEFAULT = 84
+  MIDI_MIN_DEFAULT = 48
+  MIDI_MAX_DEFAULT = 72
 
   NOTE_NAMES = ['C','C#','D','Eb','E','F','F#','G','G#','A','Bb','B']
 

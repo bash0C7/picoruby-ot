@@ -65,10 +65,19 @@ class SynthApp
     return if frames.empty?
     frames.each do |frame|
       next unless frame
-      update(frame[:distance], frame[:ax], frame[:ay], frame[:az])
+      begin
+        update(frame[:distance], frame[:ax], frame[:ay], frame[:az])
+      rescue => e
+        JS.global[:console].error("[Ruby update] #{e.class}: #{e.message}")
+      end
     end
-    # シリアルモニター更新
-    update_serial_monitor(@serial.rx_log.last.to_s)
+    begin
+      update_serial_monitor(@serial.rx_log.last.to_s)
+    rescue => e
+      JS.global[:console].error("[Ruby serial_monitor] #{e.class}: #{e.message}")
+    end
+  rescue => e
+    JS.global[:console].error("[Ruby on_receive] #{e.class}: #{e.message}")
   end
 
   # ステートレス更新 — ドローン常時オン、分岐なし
