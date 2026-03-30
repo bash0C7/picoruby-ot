@@ -20,9 +20,6 @@ class SynthPatch
       @release_osc        = nil
       @release_gain_node  = nil
       @release_gain_param = nil
-      # JSヘルパー関数キャッシュ (フレーム毎のJS::Object生成を1個に削減)
-      @batch_update_fn    = nil
-      @release_voice_fn   = nil
     end
 
     def init_audio
@@ -35,9 +32,6 @@ class SynthPatch
       JS.global[:analyserData] = JS.global[:Float32Array].new(2048)
       # JSヘルパー用にAudioContext公開
       JS.global[:_audioCtx] = @ctx
-      # JSヘルパー関数キャッシュ
-      @batch_update_fn  = JS.global[:_audioParamBatchUpdate]
-      @release_voice_fn = JS.global[:_audioReleaseVoice]
       init_release_voice
     end
 
@@ -56,8 +50,8 @@ class SynthPatch
 
     # フレーム毎一括更新 (freq + FM depth を1回のJS呼び出しで処理)
     def batch_update(freq, fm_depth, glide_sec)
-      return unless @batch_update_fn
-      @batch_update_fn.call(freq.to_f, (fm_depth.to_f * @fm_depth_scale).to_f, glide_sec.to_f)
+      return unless @ctx
+      JS.global._audioParamBatchUpdate(freq.to_f, (fm_depth.to_f * @fm_depth_scale).to_f, glide_sec.to_f)
     end
 
     def update_freq(freq, glide_sec)
@@ -76,8 +70,8 @@ class SynthPatch
 
     # リリースボイストリガー (前の音をフェードアウト)
     def trigger_release_voice(old_freq, volume, release_tc)
-      return unless @release_voice_fn
-      @release_voice_fn.call(old_freq.to_f, (volume.to_f * 0.15).to_f, release_tc.to_f)
+      return unless @ctx
+      JS.global._audioReleaseVoice(old_freq.to_f, (volume.to_f * 0.15).to_f, release_tc.to_f)
     end
 
     def update_fm_depth(depth)
