@@ -97,3 +97,22 @@ group "SynthPatch::FxNode — status_line"
 
 node = SynthPatch::FxNode.new(:reverb, mix: 0.5, name: :fx)
 assert(node.status_line.include?("reverb"), "status includes type")
+
+group "Node#fx chaining"
+
+node = SynthPatch::FMOpNode.new(:sine, freq: 440, name: :src3)
+fxed = node.fx(:none, mix: 0.5, name: :fx1)
+assert(fxed.is_a?(SynthPatch::FxNode), "returns FxNode")
+assert_equal :none, fxed.fx_type, "fx_type none"
+assert_equal 1, node.chain.length, "added to chain"
+
+group "Node#fx — signal chain filter.fx.gain"
+
+SynthPatch::Node.reset_id_counter!
+flt  = SynthPatch::FilterNode.new(:lowpass, cutoff: 1200, name: :flt2)
+fxn  = flt.fx(:echo, name: :fx2)
+gn   = fxn.gain(0.4, name: :gn2)
+assert(fxn.is_a?(SynthPatch::FxNode), "fx in chain")
+assert(gn.is_a?(SynthPatch::GainNode), "gain after fx")
+assert_equal 1, flt.chain.length, "filter.chain has fx"
+assert_equal 1, fxn.chain.length, "fx.chain has gain"

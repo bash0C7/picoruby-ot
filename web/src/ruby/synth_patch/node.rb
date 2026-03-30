@@ -41,6 +41,14 @@ class SynthPatch
       node
     end
 
+    def fx(type, mix: 0.5, delay_time: 0.2, feedback: 0.4,
+           decay: 2.0, drive: 50, tone: 3000, name: nil)
+      node = FxNode.new(type, mix: mix, delay_time: delay_time, feedback: feedback,
+                        decay: decay, drive: drive, tone: tone, name: name)
+      @chain << node
+      node
+    end
+
     def out
       @is_output = true
       self
