@@ -17,7 +17,8 @@ class SynthApp
     @el_note   = nil
     @el_freq   = nil
     @el_dist   = nil
-    @el_serial = nil
+    @el_serial   = nil
+    @el_fm_depth = nil
   end
 
   def init_audio
@@ -34,7 +35,8 @@ class SynthApp
     @el_note   = JS.global[:document].querySelector("#note-display")
     @el_freq   = JS.global[:document].querySelector("#freq-display")
     @el_dist   = JS.global[:document].querySelector("#dist-display")
-    @el_serial = JS.global[:document].querySelector("#serial-monitor")
+    @el_serial   = JS.global[:document].querySelector("#serial-monitor")
+    @el_fm_depth = JS.global[:document].querySelector("#fm-depth-display")
     JS.global[:console].log("[Ruby] Audio initialized")
   end
 
@@ -191,9 +193,10 @@ class SynthApp
   # センサーUI更新
   def update_sensor_display(dist, ax, ay, az, freq, fm_depth, note_str)
     return unless @el_note
-    begin; @el_note[:textContent] = note_str;          rescue JS::Error; end
-    begin; @el_freq[:textContent] = "#{freq.to_i}Hz";  rescue JS::Error; end
-    begin; @el_dist[:textContent] = "#{dist}mm";       rescue JS::Error; end
+    begin; @el_note[:textContent] = note_str;                              rescue JS::Error; end
+    begin; @el_freq[:textContent] = "#{freq.to_i}Hz";                     rescue JS::Error; end
+    begin; @el_dist[:textContent] = "#{dist}mm";                          rescue JS::Error; end
+    begin; @el_fm_depth[:textContent] = "%.2f" % fm_depth;                rescue JS::Error; end
   end
 
   # JS null安全なテキスト設定
