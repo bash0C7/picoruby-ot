@@ -608,7 +608,7 @@
 <script type="text/ruby" src="src/ruby/synth_patch/synth_patch.rb?v=20260330h"></script>
 <script type="text/ruby" src="src/ruby/synth_patch/web_adapter.rb?v=20260330h"></script>
 <script type="text/ruby" src="src/ruby/serial.rb?v=20260330h"></script>
-<script type="text/ruby" src="src/ruby/sensor_mapper.rb?v=20260330h"></script>
+<script type="text/ruby" src="src/ruby/sensor_mapper.rb?v=20260330i"></script>
 <script type="text/ruby" src="src/ruby/preset_manager.rb?v=20260330h"></script>
 <script type="text/ruby" src="src/ruby/ui_controller.rb?v=20260330h"></script>
 <script type="text/ruby" src="src/ruby/main.rb?v=20260330h"></script>
@@ -646,11 +646,15 @@ document.getElementById('btn-disconnect').addEventListener('click', async () => 
   } catch (e) { console.error('Serial disconnect:', e); }
 });
 
+let _rlFrameCount = 0;
 async function readLoop() {
   while (serialReader) {
     try {
       const { value, done } = await serialReader.read();
       if (done) { console.log('[Serial] stream ended'); break; }
+      if (++_rlFrameCount % 200 === 0 && performance.memory) {
+        console.log(`[Heap] frames=${_rlFrameCount} used=${Math.round(performance.memory.usedJSHeapSize/1024/1024)}MB total=${Math.round(performance.memory.totalJSHeapSize/1024/1024)}MB`);
+      }
       if (value && window.rubySerialOnReceive) window.rubySerialOnReceive(value);
     } catch (e) {
       console.error('[Serial readLoop]', e.message);
