@@ -2,33 +2,26 @@
 
 ---
 
-## ★★ otmeiwa_emurator 動作確認（最優先）
+## ★★ 実機確認チェックリスト（最優先）
 
-- [ ] **通しテスト**: `ruby web/otmeiwa_emurator.rb` → Chrome に Connect → `loop_emit` → 音出し確認
-  - `ruby web/otmeiwa_emurator.rb` を起動して表示された `/dev/ttysXXX` を Chrome で接続
-  - `index.html` を開いて Connect → Init Audio
-  - `loop_emit(d: 450, ax: 0, ay: 0, az: 0)` で音が出ることを確認
-  - `sweep(:d, 20, 900)` で音程スイープを確認
+- [ ] `rake build APP=otmeiwa` → `rake flash` → Chrome Web Serial 接続
+- [ ] `<D:NNNN,AX:NNNN,AY:NNNN,AZ:NNNN>` フレームが流れることを確認
+- [ ] Init Audio → 音が出ることを確認
+- [ ] 距離 30–570mm で音程変化を確認
+- [ ] 加速度（シェイク）で FM depth 変化を確認
+- [ ] LED hue が距離に追従することを確認
+- [ ] ボタン押下でサウンドON/OFF + キャリブレーション確認
+- [ ] FX切り替え (Off/Echo/Reverb/Distortion) 確認
+- [ ] プリセット切り替え (otamatone/clean/acid/retro) 確認
 
 ---
 
 ## ★ web/ (Chrome Synth) ← 最大優先：楽器としての完成度はここ
 
 ### 音程・音楽性
-- [ ] **MIDI note quantization**: 距離→MIDIノート番号変換（semitone snap）
-  - 距離レンジ(20〜900mm) → MIDI note 36-84 (C2-C6, 4オクターブ)
-  - log2スケールで等音程感を出す
-  - スケール選択UI: クロマチック / ペンタトニック / メジャー / マイナー
-- [ ] **Smooth glide**: 音程変化のglide time設定（theremin的な滑らかさ）
-  - 現状 50ms time constant、もっと長くして滑らかに
 - [ ] **Drone/trigger mode**: 距離閾値以下で無音（センサー範囲外=ミュート）
 
 ### シンセ音色・表現力
-- [ ] **シンセプリセット**: ボタン1発で音色切り替え
-  - "Clean" — FMなし、サイン波のみ
-  - "FM Light" — 軽いFM変調
-  - "FM Heavy" — 深いFM変調（現状に近い）
-  - "Acid" — ノコギリ波 + フィルター
 - [ ] **キャリア波形選択**: sine / square / sawtooth / triangle
 - [ ] **FM depth 手動スライダー**: 加速度に加えて手動でも調整できるように
 - [ ] **FM depth response**: 加速度→FM depth 感度チューニング（accel_scale調整）
