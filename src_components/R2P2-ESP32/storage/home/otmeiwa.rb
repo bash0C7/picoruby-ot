@@ -123,7 +123,6 @@ loop do
   instrument.send_frame
   led_viz.update(instrument.distance, instrument.ax, instrument.ay, instrument.az, instrument.sound_on)
   led_viz.show
-  sleep_ms(50)
 end
 
 irq.unregister
