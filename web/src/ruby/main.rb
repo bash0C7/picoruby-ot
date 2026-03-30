@@ -91,8 +91,8 @@ class SynthApp
     freq       = @mapper.note_to_freq(midi_float)
     fm_depth   = @mapper.accel_to_fm_depth(ax, ay, az)
 
-    @adapter.batch_update(freq, fm_depth, @glide_sec)
-    # update_gain は on_connect / on_disconnect でのみ呼ぶ (ドローン常時オン)
+    gain = dist_mm < 25 ? 0.0 : @volume
+    @adapter.batch_update(freq, fm_depth, @glide_sec, gain, @release)
 
     note_str = @mapper.note_name(midi_float.round)  # 表示のみ: 最近傍ノート名
     update_sensor_display(dist_mm, ax, ay, az, freq, fm_depth, note_str)

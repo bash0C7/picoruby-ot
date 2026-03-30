@@ -49,9 +49,9 @@ class SynthPatch
     end
 
     # フレーム毎一括更新 (freq + FM depth を1回のJS呼び出しで処理)
-    def batch_update(freq, fm_depth, glide_sec)
+    def batch_update(freq, fm_depth, glide_sec, target_gain, gain_tc)
       return unless @ctx
-      JS.global._audioParamBatchUpdate(freq.to_f, (fm_depth.to_f * @fm_depth_scale).to_f, glide_sec.to_f)
+      JS.global._audioParamBatchUpdate(freq.to_f, (fm_depth.to_f * @fm_depth_scale).to_f, glide_sec.to_f, target_gain.to_f, gain_tc.to_f)
     end
 
     def update_freq(freq, glide_sec)
@@ -156,6 +156,7 @@ class SynthPatch
       JS.global[:_carrierFreqParam] = @carrier_freq_param
       JS.global[:_modFreqParam]     = @mod_freq_param
       JS.global[:_modGainParam]     = @mod_gain_param
+      JS.global[:_masterGainParam]  = @master_gain_param
     end
 
     # 全ノード切断

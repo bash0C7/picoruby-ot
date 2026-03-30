@@ -598,6 +598,22 @@
 
 </div><!-- /#main -->
 
+<!-- ── WASM memory growth interceptor (must run before ruby.wasm loads) ── -->
+<script>
+(function() {
+  var orig = WebAssembly.Memory.prototype.grow;
+  window._wasmGrowLog = [];
+  WebAssembly.Memory.prototype.grow = function(delta) {
+    window._wasmMemory = this;
+    var before = this.buffer.byteLength;
+    var r = orig.call(this, delta);
+    var after = this.buffer.byteLength;
+    window._wasmGrowLog.push({ t: Date.now(), mb: Math.round(after/1024/1024) });
+    if (window._wasmGrowLog.length > 200) window._wasmGrowLog.shift();
+    return r;
+  };
+})();
+</script>
 <!-- ── ruby.wasm ── -->
 <script src="https://cdn.jsdelivr.net/npm/@ruby/4.0-wasm-wasi@2.8.1/dist/browser.script.iife.js"></script>
 <script type="text/ruby" src="src/ruby/synth_patch/audio_adapter.rb?v=20260330h"></script>
@@ -608,12 +624,12 @@
 <script type="text/ruby" src="src/ruby/synth_patch/gain_node.rb?v=20260330h"></script>
 <script type="text/ruby" src="src/ruby/synth_patch/mixer_node.rb?v=20260330h"></script>
 <script type="text/ruby" src="src/ruby/synth_patch/synth_patch.rb?v=20260330h"></script>
-<script type="text/ruby" src="src/ruby/synth_patch/web_adapter.rb?v=20260330k"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/web_adapter.rb?v=20260330l"></script>
 <script type="text/ruby" src="src/ruby/serial.rb?v=20260330h"></script>
 <script type="text/ruby" src="src/ruby/sensor_mapper.rb?v=20260330j"></script>
 <script type="text/ruby" src="src/ruby/preset_manager.rb?v=20260330h"></script>
 <script type="text/ruby" src="src/ruby/ui_controller.rb?v=20260330h"></script>
-<script type="text/ruby" src="src/ruby/main.rb?v=20260330k"></script>
+<script type="text/ruby" src="src/ruby/main.rb?v=20260330l"></script>
 
 <script>
 // ============================================================
@@ -692,8 +708,9 @@ async function readLoop() {
         eta = ' ETA:∞ (' + rateMBmin + 'MB/m)';
       }
     }
+    var wasmMB = window._wasmMemory ? Math.round(window._wasmMemory.buffer.byteLength/1024/1024) : '?';
     var el = document.getElementById('mem-display');
-    if (el) el.textContent = 'Mem:' + usedMB + '/' + totalMB + 'MB' + eta;
+    if (el) el.textContent = 'JS:' + usedMB + '/' + totalMB + 'MB WASM:' + wasmMB + 'MB' + eta;
   }
   tick();
   setInterval(tick, 10000);
@@ -703,7 +720,7 @@ async function readLoop() {
 // AudioParam batch update helpers (reduce ruby.wasm JS::Object allocations)
 // Ruby calls once/frame instead of 10+ individual AudioParam calls.
 // ============================================================
-window._audioParamBatchUpdate = function(freq, fmDepthScaled, glide) {
+window._audioParamBatchUpdate = function(freq, fmDepthScaled, glide, targetGain, gainTc) {
   var ctx = window._audioCtx;
   if (!ctx) return;
   var now = ctx.currentTime;
@@ -719,6 +736,10 @@ window._audioParamBatchUpdate = function(freq, fmDepthScaled, glide) {
   if (window._modGainParam) {
     window._modGainParam.cancelAndHoldAtTime(now);
     window._modGainParam.setTargetAtTime(fmDepthScaled, now, 0.01);
+  }
+  if (window._masterGainParam) {
+    window._masterGainParam.cancelAndHoldAtTime(now);
+    window._masterGainParam.setTargetAtTime(targetGain, now, gainTc > 0.001 ? gainTc : 0.001);
   }
 };
 
