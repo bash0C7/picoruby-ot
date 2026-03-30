@@ -37,6 +37,7 @@
     #header button:hover { border-color: #4caf50; color: #4caf50; }
     #header #btn-init-audio { border-color: #6644cc; color: #9977ee; }
     #serial-status { font-size: 24px; color: #f44336; line-height: 1; }
+    #mem-display { font-size: 11px; color: #555; font-family: monospace; white-space: nowrap; }
     #header-spacer { flex: 1; }
     #note-info {
       display: flex;
@@ -366,6 +367,7 @@
   <button id="btn-init-audio">Init Audio</button>
   <span>Status:</span>
   <span id="serial-status">●</span>
+  <span id="mem-display">Mem:--</span>
   <div id="header-spacer"></div>
   <div id="note-info">
     <span>Note: <span id="note-display">--</span></span>
@@ -646,15 +648,11 @@ document.getElementById('btn-disconnect').addEventListener('click', async () => 
   } catch (e) { console.error('Serial disconnect:', e); }
 });
 
-let _rlFrameCount = 0;
 async function readLoop() {
   while (serialReader) {
     try {
       const { value, done } = await serialReader.read();
       if (done) { console.log('[Serial] stream ended'); break; }
-      if (++_rlFrameCount % 200 === 0 && performance.memory) {
-        console.log(`[Heap] frames=${_rlFrameCount} used=${Math.round(performance.memory.usedJSHeapSize/1024/1024)}MB total=${Math.round(performance.memory.totalJSHeapSize/1024/1024)}MB`);
-      }
       if (value && window.rubySerialOnReceive) window.rubySerialOnReceive(value);
     } catch (e) {
       console.error('[Serial readLoop]', e.message);
@@ -662,6 +660,76 @@ async function readLoop() {
     }
   }
 }
+
+// ============================================================
+// Memory monitor (10s interval)
+// ============================================================
+(function() {
+  var _samples = [];
+  var CRASH_LIMIT = 2 * 1024 * 1024 * 1024;
+  function tick() {
+    if (!performance.memory) return;
+    var total = performance.memory.totalJSHeapSize;
+    var used  = performance.memory.usedJSHeapSize;
+    var now   = Date.now();
+    _samples.push({ t: now, total: total });
+    if (_samples.length > 18) _samples.shift();
+    var usedMB  = Math.round(used  / 1024 / 1024);
+    var totalMB = Math.round(total / 1024 / 1024);
+    var eta = '';
+    if (_samples.length >= 2) {
+      var s0 = _samples[0], s1 = _samples[_samples.length - 1];
+      var dt = (s1.t - s0.t) / 1000;
+      var dTotal = s1.total - s0.total;
+      if (dTotal > 0 && dt > 0) {
+        var rate = dTotal / dt;
+        var sec = (CRASH_LIMIT - s1.total) / rate;
+        eta = sec < 3600
+          ? ' ETA~' + Math.round(sec / 60) + 'm'
+          : ' ETA~' + (sec / 3600).toFixed(1) + 'h';
+      } else {
+        eta = ' stable';
+      }
+    }
+    var el = document.getElementById('mem-display');
+    if (el) el.textContent = 'Mem:' + usedMB + '/' + totalMB + 'MB' + eta;
+  }
+  tick();
+  setInterval(tick, 10000);
+})();
+
+// ============================================================
+// AudioParam batch update helpers (reduce ruby.wasm JS::Object allocations)
+// Ruby calls once/frame instead of 10+ individual AudioParam calls.
+// ============================================================
+window._audioParamBatchUpdate = function(freq, fmDepthScaled, glide) {
+  var ctx = window._audioCtx;
+  if (!ctx) return;
+  var now = ctx.currentTime;
+  var tc = glide > 0.001 ? glide : 0.001;
+  if (window._carrierFreqParam) {
+    window._carrierFreqParam.cancelAndHoldAtTime(now);
+    window._carrierFreqParam.setTargetAtTime(freq, now, tc);
+  }
+  if (window._modFreqParam) {
+    window._modFreqParam.cancelAndHoldAtTime(now);
+    window._modFreqParam.setTargetAtTime(freq, now, tc);
+  }
+  if (window._modGainParam) {
+    window._modGainParam.cancelAndHoldAtTime(now);
+    window._modGainParam.setTargetAtTime(fmDepthScaled, now, 0.01);
+  }
+};
+
+window._audioReleaseVoice = function(oldFreq, gainVal, releaseTc) {
+  var ctx = window._audioCtx;
+  if (!ctx || !window._releaseGainParam || !window._releaseOsc) return;
+  var now = ctx.currentTime;
+  window._releaseOsc.frequency.value = oldFreq;
+  window._releaseGainParam.cancelAndHoldAtTime(now);
+  window._releaseGainParam.setValueAtTime(gainVal, now);
+  window._releaseGainParam.setTargetAtTime(0.0, now, releaseTc > 0.05 ? releaseTc : 0.05);
+};
 
 // ============================================================
 // Audio init (requires user gesture)

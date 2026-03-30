@@ -98,8 +98,7 @@ class SynthApp
     @prev_midi_float = midi_float
     @prev_freq       = freq
 
-    @adapter.update_freq(freq, @glide_sec)
-    @adapter.update_fm_depth(fm_depth)
+    @adapter.batch_update(freq, fm_depth, @glide_sec)
     # update_gain は on_connect / on_disconnect でのみ呼ぶ (ドローン常時オン)
 
     note_str = @mapper.note_name(midi_float.round)  # 表示のみ: 最近傍ノート名

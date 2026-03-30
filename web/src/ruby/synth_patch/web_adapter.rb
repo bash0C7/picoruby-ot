@@ -20,6 +20,9 @@ class SynthPatch
       @release_osc        = nil
       @release_gain_node  = nil
       @release_gain_param = nil
+      # JSヘルパー関数キャッシュ (フレーム毎のJS::Object生成を1個に削減)
+      @batch_update_fn    = nil
+      @release_voice_fn   = nil
     end
 
     def init_audio
@@ -30,6 +33,11 @@ class SynthPatch
       # JS描画ループ用にグローバル公開
       JS.global[:analyser] = @analyser
       JS.global[:analyserData] = JS.global[:Float32Array].new(2048)
+      # JSヘルパー用にAudioContext公開
+      JS.global[:_audioCtx] = @ctx
+      # JSヘルパー関数キャッシュ
+      @batch_update_fn  = JS.global[:_audioParamBatchUpdate]
+      @release_voice_fn = JS.global[:_audioReleaseVoice]
       init_release_voice
     end
 
@@ -44,6 +52,12 @@ class SynthPatch
       build_nodes(spec)
       connect_nodes(spec)
       cache_audio_params
+    end
+
+    # フレーム毎一括更新 (freq + FM depth を1回のJS呼び出しで処理)
+    def batch_update(freq, fm_depth, glide_sec)
+      return unless @batch_update_fn
+      @batch_update_fn.call(freq.to_f, (fm_depth.to_f * @fm_depth_scale).to_f, glide_sec.to_f)
     end
 
     def update_freq(freq, glide_sec)
@@ -62,12 +76,8 @@ class SynthPatch
 
     # リリースボイストリガー (前の音をフェードアウト)
     def trigger_release_voice(old_freq, volume, release_tc)
-      return unless @ctx && @release_gain_param
-      now = @ctx[:currentTime].to_f
-      @release_osc[:frequency][:value] = old_freq.to_f
-      @release_gain_param.cancelAndHoldAtTime(now)
-      @release_gain_param.setValueAtTime(volume.to_f * 0.15, now)
-      @release_gain_param.setTargetAtTime(0.0, now, [release_tc.to_f, 0.05].max)
+      return unless @release_voice_fn
+      @release_voice_fn.call(old_freq.to_f, (volume.to_f * 0.15).to_f, release_tc.to_f)
     end
 
     def update_fm_depth(depth)
@@ -134,6 +144,9 @@ class SynthPatch
       @release_osc.connect(@release_gain_node)
       @release_gain_node.connect(@analyser)
       @release_osc.start
+      # JSヘルパー用に公開
+      JS.global[:_releaseOsc]       = @release_osc
+      JS.global[:_releaseGainParam] = @release_gain_param
     end
 
     # AudioParamキャッシュ更新
@@ -145,6 +158,10 @@ class SynthPatch
       @mod_freq_param     = mod     && mod[:osc]     ? mod[:osc][:frequency]     : nil
       @mod_gain_param     = mod     && mod[:gain]    ? mod[:gain][:gain]         : nil
       @master_gain_param  = master  && master[:gain_node] ? master[:gain_node][:gain] : nil
+      # JSヘルパー用に公開 (プリセット切替時も更新)
+      JS.global[:_carrierFreqParam] = @carrier_freq_param
+      JS.global[:_modFreqParam]     = @mod_freq_param
+      JS.global[:_modGainParam]     = @mod_gain_param
     end
 
     # 全ノード切断
