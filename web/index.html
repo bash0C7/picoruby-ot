@@ -681,14 +681,15 @@ async function readLoop() {
       var s0 = _samples[0], s1 = _samples[_samples.length - 1];
       var dt = (s1.t - s0.t) / 1000;
       var dTotal = s1.total - s0.total;
-      if (dTotal > 0 && dt > 0) {
+      var rateMBmin = (dTotal / dt * 60 / 1024 / 1024).toFixed(2);
+      if (dTotal > 1024 * 1024 && dt > 0) {
         var rate = dTotal / dt;
         var sec = (CRASH_LIMIT - s1.total) / rate;
         eta = sec < 3600
-          ? ' ETA~' + Math.round(sec / 60) + 'm'
-          : ' ETA~' + (sec / 3600).toFixed(1) + 'h';
+          ? ' ETA~' + Math.round(sec / 60) + 'm (+' + rateMBmin + 'MB/m)'
+          : ' ETA~' + (sec / 3600).toFixed(1) + 'h (+' + rateMBmin + 'MB/m)';
       } else {
-        eta = ' stable';
+        eta = ' ETA:∞ (' + rateMBmin + 'MB/m)';
       }
     }
     var el = document.getElementById('mem-display');
