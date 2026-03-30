@@ -223,9 +223,10 @@ class SynthApp
     end
   end
 
-  # シリアルモニターUI更新
+  # シリアルモニターUI更新 — details非表示時はスキップ (CPU節約)
   def update_serial_monitor(line)
     return unless @el_serial
+    return if JS.global._serialMonitorOpen.to_s == "false"
     @serial_monitor_text = (line + "\n" + @serial_monitor_text)[0, 2000]
     begin
       @el_serial[:textContent] = @serial_monitor_text
