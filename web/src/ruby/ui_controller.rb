@@ -78,9 +78,11 @@ class UIController
 
   def animate_frame
     return unless @analyser
-    # JSヘルパー呼び出し — ruby.wasm JS::Object生成を2回/フレームに削減
-    JS.global._drawOscilloscope
-    JS.global._drawLevelMeter
+    # 表示中のときのみ描画 — 非表示時はJS::Object生成ゼロ
+    if JS.global._audioMonitorOpen.to_s != "false"
+      JS.global._drawOscilloscope
+      JS.global._drawLevelMeter
+    end
     JS.global.setTimeout(@raf_callback, 200)
   end
 
