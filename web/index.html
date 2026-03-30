@@ -469,7 +469,49 @@
         </div>
       </div>
 
-      <!-- Arrow: Filter → Master -->
+      <!-- Arrow: Filter → FX -->
+      <div class="node-arrow">→</div>
+
+      <!-- FX node -->
+      <div class="node fx">
+        <div class="node-title" id="fx-graph-label">FX</div>
+        <div class="node-row">
+          <div class="btn-group" id="fx-type-group">
+            <button data-fx="none" class="active">Off</button>
+            <button data-fx="echo">Echo</button>
+            <button data-fx="reverb">Reverb</button>
+            <button data-fx="distortion">Dist</button>
+          </div>
+        </div>
+        <div class="node-row">
+          <label>Mix</label>
+          <input type="range" min="0" max="1" step="0.01" value="0.5" data-param="fx:mix">
+          <span class="nv">0.50</span>
+        </div>
+        <div class="node-row fx-params" id="fx-echo-params" style="display:none">
+          <label>Dly</label>
+          <input type="range" min="0.05" max="1.0" step="0.01" value="0.20" data-param="fx:delay_time">
+          <span class="nv">0.20</span>
+          <label>FB</label>
+          <input type="range" min="0" max="0.95" step="0.01" value="0.40" data-param="fx:feedback">
+          <span class="nv">0.40</span>
+        </div>
+        <div class="node-row fx-params" id="fx-reverb-params" style="display:none">
+          <label>Dec</label>
+          <input type="range" min="0.5" max="4.0" step="0.1" value="2.0" data-param="fx:decay">
+          <span class="nv">2.0</span>
+        </div>
+        <div class="node-row fx-params" id="fx-dist-params" style="display:none">
+          <label>Drv</label>
+          <input type="range" min="1" max="100" step="1" value="50" data-param="fx:drive">
+          <span class="nv">50</span>
+          <label>Tone</label>
+          <input type="range" min="500" max="8000" step="100" value="3000" data-param="fx:tone">
+          <span class="nv">3000</span>
+        </div>
+      </div>
+
+      <!-- Arrow: FX → Master -->
       <div class="node-arrow">→</div>
 
       <!-- Master node -->
@@ -631,19 +673,20 @@
 <!-- ── ruby.wasm ── -->
 <script src="https://cdn.jsdelivr.net/npm/@ruby/4.0-wasm-wasi@2.8.1/dist/browser.script.iife.js"></script>
 <script type="text/ruby" src="src/ruby/synth_patch/audio_adapter.rb?v=20260330h"></script>
-<script type="text/ruby" src="src/ruby/synth_patch/node.rb?v=20260330h"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/node.rb?v=20260330i"></script>
 <script type="text/ruby" src="src/ruby/synth_patch/osc_node.rb?v=20260330h"></script>
 <script type="text/ruby" src="src/ruby/synth_patch/fm_op_node.rb?v=20260330h"></script>
 <script type="text/ruby" src="src/ruby/synth_patch/filter_node.rb?v=20260330h"></script>
 <script type="text/ruby" src="src/ruby/synth_patch/gain_node.rb?v=20260330h"></script>
 <script type="text/ruby" src="src/ruby/synth_patch/mixer_node.rb?v=20260330h"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/fx_node.rb?v=20260330i"></script>
 <script type="text/ruby" src="src/ruby/synth_patch/synth_patch.rb?v=20260330h"></script>
-<script type="text/ruby" src="src/ruby/synth_patch/web_adapter.rb?v=20260330o"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/web_adapter.rb?v=20260330i"></script>
 <script type="text/ruby" src="src/ruby/serial.rb?v=20260330h"></script>
 <script type="text/ruby" src="src/ruby/sensor_mapper.rb?v=20260330j"></script>
-<script type="text/ruby" src="src/ruby/preset_manager.rb?v=20260330h"></script>
+<script type="text/ruby" src="src/ruby/preset_manager.rb?v=20260330i"></script>
 <script type="text/ruby" src="src/ruby/ui_controller.rb?v=20260330s"></script>
-<script type="text/ruby" src="src/ruby/main.rb?v=20260330s"></script>
+<script type="text/ruby" src="src/ruby/main.rb?v=20260330i"></script>
 
 <script>
 // ============================================================
@@ -989,6 +1032,19 @@ document.querySelectorAll('#filter-type-group input[type="radio"]').forEach(radi
     if (radio.checked && window.rubyOnParamUpdate) {
       window.rubyOnParamUpdate('filter:filter_type', radio.value);
     }
+  });
+});
+
+// FX type buttons
+document.querySelectorAll('#fx-type-group button[data-fx]').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    var fxType = this.getAttribute('data-fx');
+    document.querySelectorAll('.fx-params').forEach(function(el) { el.style.display = 'none'; });
+    if (fxType !== 'none') {
+      var paramEl = document.getElementById('fx-' + fxType + '-params');
+      if (paramEl) paramEl.style.display = '';
+    }
+    if (window.rubyOnParamUpdate) window.rubyOnParamUpdate('fx_type', fxType);
   });
 });
 
