@@ -13,23 +13,22 @@ assert_equal 500.0, m.accel_scale, "default accel_scale"
 group "SensorMapper#note_to_freq"
 
 m = SensorMapper.new
-assert_equal 440, m.note_to_freq(69), "A4 = 440Hz (integer)"
-assert_equal 261, m.note_to_freq(60), "C4 = 261Hz (truncated)"
-assert_equal 880, m.note_to_freq(81), "A5 = 880Hz"
+assert_equal 440, m.note_to_freq(69), "A3 = 440Hz (integer)"
+assert_equal 261, m.note_to_freq(60), "C3 = 261Hz (truncated)"
+assert_equal 880, m.note_to_freq(81), "A4 = 880Hz"
 
 group "SensorMapper#note_name"
 
 m = SensorMapper.new
-assert_equal "A4", m.note_name(69), "MIDI 69 = A4"
-assert_equal "C4", m.note_name(60), "MIDI 60 = C4"
-assert_equal "C2", m.note_name(36), "MIDI 36 = C2"
-assert_equal "Bb4", m.note_name(70), "MIDI 70 = Bb4 (mixed notation)"
-assert_equal "Eb4", m.note_name(63), "MIDI 63 = Eb4 (mixed notation)"
+assert_equal "A3", m.note_name(69), "MIDI 69 = A3"
+assert_equal "C3", m.note_name(60), "MIDI 60 = C3"
+assert_equal "C1", m.note_name(36), "MIDI 36 = C1"
+assert_equal "Bb3", m.note_name(70), "MIDI 70 = Bb3 (mixed notation)"
+assert_equal "Eb3", m.note_name(63), "MIDI 63 = Eb3 (mixed notation)"
 
-group "SensorMapper#distance_to_note — chromatic"
+group "SensorMapper#distance_to_note — chromatic linear"
 
 m = SensorMapper.new
-m.set_scale(:chromatic)
 note_min = m.distance_to_note(20)
 note_max = m.distance_to_note(900)
 assert_equal 36, note_min, "dist_min → midi_min"
@@ -38,19 +37,10 @@ assert_equal 84, note_max, "dist_max → midi_max"
 group "SensorMapper#distance_to_note — clamping"
 
 m = SensorMapper.new
-m.set_scale(:chromatic)
 note_below = m.distance_to_note(0)
 note_above = m.distance_to_note(2000)
 assert_equal 36, note_below, "below dist_min → midi_min"
 assert_equal 84, note_above, "above dist_max → midi_max"
-
-group "SensorMapper#distance_to_note — pentatonic snap"
-
-m = SensorMapper.new
-m.set_scale(:pentatonic)
-note = m.distance_to_note(460)
-scale_degrees = [0, 2, 4, 7, 9]
-assert(scale_degrees.include?(note % 12), "pentatonic snap: #{note} mod 12 = #{note % 12}")
 
 group "SensorMapper#accel_to_fm_depth"
 
@@ -73,15 +63,6 @@ assert(m.in_range?(20), "20mm boundary inclusive")
 assert(m.in_range?(900), "900mm boundary inclusive")
 assert(!m.in_range?(19), "19mm out of range")
 assert(!m.in_range?(901), "901mm out of range")
-
-group "SensorMapper#set_scale"
-
-m = SensorMapper.new
-m.set_scale(:major)
-m.set_scale(:minor)
-m.set_scale(:pentatonic)
-m.set_scale(:chromatic)
-assert(true, "all scales accepted")
 
 group "SensorMapper#set_dist_range"
 
@@ -127,28 +108,13 @@ assert_in_delta(0.0, m.apply_curve(0.0, :s_curve), 0.001, "s_curve 0.0")
 assert_in_delta(0.5, m.apply_curve(0.5, :s_curve), 0.001, "s_curve 0.5 = midpoint")
 assert_in_delta(1.0, m.apply_curve(1.0, :s_curve), 0.001, "s_curve 1.0")
 
-group "SensorMapper — dist_curve / accel_curve state"
+group "SensorMapper — accel_curve state"
 
 m = SensorMapper.new
-assert_equal :linear, m.dist_curve, "default dist_curve is linear"
 assert_equal :linear, m.accel_curve, "default accel_curve is linear"
-
-m.set_dist_curve(:log)
-assert_equal :log, m.dist_curve, "dist_curve updated to log"
 
 m.set_accel_curve(:exp)
 assert_equal :exp, m.accel_curve, "accel_curve updated to exp"
-
-group "SensorMapper#distance_to_note — with log curve"
-
-m = SensorMapper.new
-m.set_scale(:chromatic)
-m.set_dist_curve(:log)
-m2 = SensorMapper.new
-m2.set_scale(:chromatic)
-note_linear = m2.distance_to_note(200)
-note_log = m.distance_to_note(200)
-assert(note_log >= note_linear, "log curve: note_log(#{note_log}) >= note_linear(#{note_linear})")
 
 group "SensorMapper#accel_to_fm_depth — with exp curve"
 
@@ -182,7 +148,6 @@ assert_equal(-24, m.transpose, "clamped at -24")
 group "SensorMapper#distance_to_note — with transpose"
 
 m = SensorMapper.new
-m.set_scale(:chromatic)
 base_note = m.distance_to_note(460)
 m.transpose_up
 transposed_note = m.distance_to_note(460)
@@ -191,16 +156,16 @@ assert_equal base_note + 12, transposed_note, "transpose +12 applied"
 group "SensorMapper#note_name — mixed notation"
 
 m = SensorMapper.new
-assert_equal "C4", m.note_name(60), "C4"
-assert_equal "C#4", m.note_name(61), "C#4"
-assert_equal "D4", m.note_name(62), "D4"
-assert_equal "Eb4", m.note_name(63), "Eb4"
-assert_equal "E4", m.note_name(64), "E4"
-assert_equal "F4", m.note_name(65), "F4"
-assert_equal "F#4", m.note_name(66), "F#4"
-assert_equal "G4", m.note_name(67), "G4"
-assert_equal "G#4", m.note_name(68), "G#4"
-assert_equal "A4", m.note_name(69), "A4"
-assert_equal "Bb4", m.note_name(70), "Bb4"
-assert_equal "B4", m.note_name(71), "B4"
-assert_equal "C5", m.note_name(72), "C5"
+assert_equal "C3", m.note_name(60), "C3"
+assert_equal "C#3", m.note_name(61), "C#3"
+assert_equal "D3", m.note_name(62), "D3"
+assert_equal "Eb3", m.note_name(63), "Eb3"
+assert_equal "E3", m.note_name(64), "E3"
+assert_equal "F3", m.note_name(65), "F3"
+assert_equal "F#3", m.note_name(66), "F#3"
+assert_equal "G3", m.note_name(67), "G3"
+assert_equal "G#3", m.note_name(68), "G#3"
+assert_equal "A3", m.note_name(69), "A3"
+assert_equal "Bb3", m.note_name(70), "Bb3"
+assert_equal "B3", m.note_name(71), "B3"
+assert_equal "C4", m.note_name(72), "C4"

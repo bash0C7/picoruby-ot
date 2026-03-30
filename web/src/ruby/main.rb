@@ -21,8 +21,7 @@ class SynthApp
     sync_preset_ui(@presets.patch)
     # オシロスコープ・レベルメーター開始
     @ui.start_animation(@adapter.analyser)
-    # 初期カーブ描画
-    @ui.draw_curve("#dist-curve-canvas", :linear)
+    # アクセルカーブ描画
     @ui.draw_curve("#accel-curve-canvas", :linear)
     JS.global[:console].log("[Ruby] Audio initialized")
   end
@@ -61,18 +60,17 @@ class SynthApp
     update_serial_monitor(@serial.rx_log.last.to_s)
   end
 
-  # ステートレス更新 — 毎フレーム同じ処理、分岐なし
+  # ステートレス更新 — ドローン常時オン、分岐なし
   def update(dist_mm, ax, ay, az)
     return unless @adapter
 
     note = @mapper.distance_to_note(dist_mm)
     freq = @mapper.note_to_freq(note)
     fm_depth = @mapper.accel_to_fm_depth(ax, ay, az)
-    in_range = @mapper.in_range?(dist_mm)
 
     @adapter.update_freq(freq.to_f, @glide_sec)
     @adapter.update_fm_depth(fm_depth)
-    @adapter.update_gain(in_range ? @volume : 0.0, in_range ? @attack : @release)
+    @adapter.update_gain(@volume, @attack)
 
     # センサー表示更新
     note_str = @mapper.note_name(note)
@@ -82,16 +80,11 @@ class SynthApp
   def on_param(key, value)
     case key
     when "preset"      then switch_preset(value.to_s.to_sym)
-    when "scale"       then @mapper.set_scale(value.to_s.to_sym)
     when "oct_up"      then @mapper.transpose_up; update_octave_display
     when "oct_down"    then @mapper.transpose_down; update_octave_display
     when "glide"       then @glide_sec = value.to_f / 1000.0
     when "attack"      then @attack = value.to_f / 1000.0
     when "release"     then @release = value.to_f / 1000.0
-    when "dist_curve"
-      curve = value.to_s.to_sym
-      @mapper.set_dist_curve(curve)
-      @ui.draw_curve("#dist-curve-canvas", curve)
     when "accel_curve"
       curve = value.to_s.to_sym
       @mapper.set_accel_curve(curve)

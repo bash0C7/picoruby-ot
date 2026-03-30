@@ -9,7 +9,7 @@
       background: #1a1a2e;
       color: #ccc;
       font-family: monospace;
-      font-size: 12px;
+      font-size: 16px;
       width: 100vw;
       overflow-x: hidden;
     }
@@ -25,28 +25,28 @@
       flex-wrap: wrap;
     }
     #header button {
-      padding: 5px 12px;
+      padding: 8px 16px;
       background: #1e1e3a;
       border: 1px solid #4444aa;
       color: #aab;
       cursor: pointer;
       font-family: monospace;
-      font-size: 12px;
+      font-size: 15px;
       border-radius: 3px;
     }
     #header button:hover { border-color: #4caf50; color: #4caf50; }
     #header #btn-init-audio { border-color: #6644cc; color: #9977ee; }
-    #serial-status { font-size: 18px; color: #f44336; line-height: 1; }
+    #serial-status { font-size: 24px; color: #f44336; line-height: 1; }
     #header-spacer { flex: 1; }
     #note-info {
       display: flex;
       gap: 12px;
-      font-size: 13px;
+      font-size: 16px;
       color: #aaa;
     }
-    #note-display { color: #4caf50; font-weight: bold; font-size: 15px; }
-    #freq-display { color: #6cf; }
-    #dist-display { color: #fc6; }
+    #note-display { color: #4caf50; font-weight: bold; font-size: 20px; }
+    #freq-display { color: #6cf; font-size: 16px; }
+    #dist-display { color: #fc6; font-size: 16px; }
 
     /* ── Main Area ── */
     #main { padding: 10px 12px; }
@@ -61,7 +61,7 @@
     }
     .sec-title {
       color: #7777cc;
-      font-size: 10px;
+      font-size: 14px;
       font-weight: bold;
       text-transform: uppercase;
       letter-spacing: 1px;
@@ -101,12 +101,12 @@
       background: #0e0e1e;
       border: 1px solid #2a2a6a;
       border-radius: 4px;
-      padding: 6px 8px;
-      min-width: 120px;
+      padding: 10px 14px;
+      min-width: 160px;
       flex-shrink: 0;
     }
     .node-title {
-      font-size: 10px;
+      font-size: 13px;
       font-weight: bold;
       text-transform: uppercase;
       letter-spacing: 0.5px;
@@ -129,13 +129,13 @@
     .node-row label {
       width: 52px;
       color: #666;
-      font-size: 10px;
+      font-size: 13px;
       flex-shrink: 0;
     }
     .node-row input[type="range"] {
       flex: 1;
       accent-color: #4caf50;
-      height: 12px;
+      height: 18px;
       min-width: 60px;
     }
     .node-row select {
@@ -144,7 +144,7 @@
       color: #aaa;
       border: 1px solid #444;
       font-family: monospace;
-      font-size: 10px;
+      font-size: 13px;
       padding: 1px 3px;
       border-radius: 2px;
     }
@@ -152,8 +152,24 @@
       width: 36px;
       text-align: right;
       color: #777;
-      font-size: 10px;
+      font-size: 13px;
       flex-shrink: 0;
+    }
+    .radio-group {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .radio-label {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      font-size: 13px;
+      color: #aaa;
+      cursor: pointer;
+    }
+    .radio-label input[type="radio"] {
+      accent-color: #4caf50;
     }
 
     /* FM mod group (vertically stacked above carrier) */
@@ -187,20 +203,20 @@
       margin-bottom: 4px;
     }
     .curve-buttons button {
-      padding: 2px 8px;
+      padding: 4px 12px;
       background: #1a1a2e;
       border: 1px solid #333;
       color: #777;
       cursor: pointer;
       font-family: monospace;
-      font-size: 10px;
+      font-size: 13px;
       border-radius: 2px;
     }
     .curve-buttons button:hover { border-color: #4caf50; color: #4caf50; }
     .curve-buttons button.active { border-color: #4caf50; color: #4caf50; background: #0a1a0a; }
     .curve-label {
       color: #555;
-      font-size: 10px;
+      font-size: 13px;
       margin-bottom: 3px;
     }
     canvas.curve-canvas {
@@ -220,13 +236,13 @@
       margin-bottom: 6px;
     }
     .btn-group button {
-      padding: 3px 9px;
+      padding: 6px 16px;
       background: #1a1a2e;
       border: 1px solid #333;
       color: #888;
       cursor: pointer;
       font-family: monospace;
-      font-size: 11px;
+      font-size: 14px;
       border-radius: 3px;
     }
     .btn-group button:hover { border-color: #4caf50; color: #4caf50; }
@@ -238,9 +254,9 @@
       gap: 6px;
       margin-bottom: 4px;
     }
-    .ctrl-row label { width: 64px; color: #666; font-size: 10px; flex-shrink: 0; }
-    .ctrl-row input[type="range"] { flex: 1; accent-color: #4caf50; height: 12px; }
-    .ctrl-row .cv { width: 40px; text-align: right; color: #777; font-size: 10px; flex-shrink: 0; }
+    .ctrl-row label { width: 64px; color: #666; font-size: 13px; flex-shrink: 0; }
+    .ctrl-row input[type="range"] { flex: 1; accent-color: #4caf50; height: 18px; }
+    .ctrl-row .cv { width: 40px; text-align: right; color: #777; font-size: 13px; flex-shrink: 0; }
 
     /* Octave control */
     #oct-display {
@@ -249,27 +265,27 @@
       gap: 6px;
       margin-bottom: 6px;
     }
-    #oct-display label { color: #666; font-size: 10px; }
+    #oct-display label { color: #666; font-size: 13px; }
     #oct-display .oct-dots {
       display: flex;
       gap: 3px;
     }
     .oct-dot {
-      width: 8px;
-      height: 8px;
+      width: 12px;
+      height: 12px;
       border-radius: 50%;
       background: #333;
       border: 1px solid #444;
     }
     .oct-dot.active { background: #4caf50; border-color: #4caf50; }
     #oct-display button {
-      padding: 1px 7px;
+      padding: 4px 12px;
       background: #1a1a2e;
       border: 1px solid #333;
       color: #888;
       cursor: pointer;
       font-family: monospace;
-      font-size: 11px;
+      font-size: 14px;
       border-radius: 2px;
     }
     #oct-display button:hover { border-color: #4caf50; color: #4caf50; }
@@ -428,14 +444,14 @@
       <!-- Filter node -->
       <div class="node filter">
         <div class="node-title">Filter</div>
-        <div class="node-row">
+        <div class="node-row filter-type-row">
           <label>Type</label>
-          <select data-param="filter:filter_type">
-            <option value="lowpass" selected>lowpass</option>
-            <option value="highpass">highpass</option>
-            <option value="bandpass">bandpass</option>
-            <option value="notch">notch</option>
-          </select>
+          <div class="radio-group" id="filter-type-group">
+            <label class="radio-label"><input type="radio" name="filter_type" value="lowpass" checked> LP</label>
+            <label class="radio-label"><input type="radio" name="filter_type" value="highpass"> HP</label>
+            <label class="radio-label"><input type="radio" name="filter_type" value="bandpass"> BP</label>
+            <label class="radio-label"><input type="radio" name="filter_type" value="notch"> NT</label>
+          </div>
         </div>
         <div class="node-row">
           <label>Cutoff</label>
@@ -475,15 +491,6 @@
     <div class="sec">
       <div class="sec-title">Sensor Mapping</div>
 
-      <div class="curve-label">Dist → Pitch</div>
-      <div class="curve-buttons" data-curve-target="dist">
-        <button data-curve="linear" class="active">Lin</button>
-        <button data-curve="log">Log</button>
-        <button data-curve="exp">Exp</button>
-        <button data-curve="s_curve">S</button>
-      </div>
-      <canvas class="curve-canvas" id="dist-curve-canvas" width="200" height="50"></canvas>
-
       <div class="curve-label">Accel → FM Depth</div>
       <div class="curve-buttons" data-curve-target="accel">
         <button data-curve="linear" class="active">Lin</button>
@@ -504,14 +511,6 @@
         <button data-preset="clean">Clean</button>
         <button data-preset="acid">Acid</button>
         <button data-preset="retro">Retro</button>
-      </div>
-
-      <!-- Scale -->
-      <div id="scale-select" class="btn-group">
-        <button data-scale="pentatonic" class="active">Penta</button>
-        <button data-scale="major">Major</button>
-        <button data-scale="minor">Minor</button>
-        <button data-scale="chromatic">Chrom</button>
       </div>
 
       <!-- Octave -->
@@ -599,20 +598,20 @@
 
 <!-- ── ruby.wasm ── -->
 <script src="https://cdn.jsdelivr.net/npm/@ruby/4.0-wasm-wasi@2.8.1/dist/browser.script.iife.js"></script>
-<script type="text/ruby" src="src/ruby/synth_patch/audio_adapter.rb?v=20260329h"></script>
-<script type="text/ruby" src="src/ruby/synth_patch/node.rb?v=20260329h"></script>
-<script type="text/ruby" src="src/ruby/synth_patch/osc_node.rb?v=20260329h"></script>
-<script type="text/ruby" src="src/ruby/synth_patch/fm_op_node.rb?v=20260329h"></script>
-<script type="text/ruby" src="src/ruby/synth_patch/filter_node.rb?v=20260329h"></script>
-<script type="text/ruby" src="src/ruby/synth_patch/gain_node.rb?v=20260329h"></script>
-<script type="text/ruby" src="src/ruby/synth_patch/mixer_node.rb?v=20260329h"></script>
-<script type="text/ruby" src="src/ruby/synth_patch/synth_patch.rb?v=20260329h"></script>
-<script type="text/ruby" src="src/ruby/synth_patch/web_adapter.rb?v=20260329h"></script>
-<script type="text/ruby" src="src/ruby/serial.rb?v=20260329h"></script>
-<script type="text/ruby" src="src/ruby/sensor_mapper.rb?v=20260329h"></script>
-<script type="text/ruby" src="src/ruby/preset_manager.rb?v=20260329h"></script>
-<script type="text/ruby" src="src/ruby/ui_controller.rb?v=20260329h"></script>
-<script type="text/ruby" src="src/ruby/main.rb?v=20260329h"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/audio_adapter.rb?v=20260330a"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/node.rb?v=20260330a"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/osc_node.rb?v=20260330a"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/fm_op_node.rb?v=20260330a"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/filter_node.rb?v=20260330a"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/gain_node.rb?v=20260330a"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/mixer_node.rb?v=20260330a"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/synth_patch.rb?v=20260330a"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/web_adapter.rb?v=20260330a"></script>
+<script type="text/ruby" src="src/ruby/serial.rb?v=20260330a"></script>
+<script type="text/ruby" src="src/ruby/sensor_mapper.rb?v=20260330a"></script>
+<script type="text/ruby" src="src/ruby/preset_manager.rb?v=20260330a"></script>
+<script type="text/ruby" src="src/ruby/ui_controller.rb?v=20260330a"></script>
+<script type="text/ruby" src="src/ruby/main.rb?v=20260330a"></script>
 
 <script>
 // ============================================================
@@ -685,15 +684,6 @@ document.querySelectorAll('#presets button').forEach(btn => {
   });
 });
 
-// Scale buttons
-document.querySelectorAll('#scale-select button').forEach(btn => {
-  btn.addEventListener('click', e => {
-    document.querySelectorAll('#scale-select button').forEach(b => b.classList.remove('active'));
-    e.target.classList.add('active');
-    if (window.rubyOnParamUpdate) window.rubyOnParamUpdate('scale', e.target.dataset.scale);
-  });
-});
-
 // Octave
 document.getElementById('oct-up').addEventListener('click', () => {
   if (window.rubyOnParamUpdate) window.rubyOnParamUpdate('oct_up', '1');
@@ -724,7 +714,7 @@ document.querySelectorAll('.curve-buttons button').forEach(btn => {
   });
 });
 
-// Node controls — sliders and selects
+// Node controls — sliders and selects (select は waveform のみ残存)
 document.querySelectorAll('.node input[type="range"], .node select').forEach(el => {
   const event = el.tagName === 'SELECT' ? 'change' : 'input';
   el.addEventListener(event, () => {
@@ -735,6 +725,15 @@ document.querySelectorAll('.node input[type="range"], .node select').forEach(el 
     if (row && el.type === 'range') {
       const nv = row.querySelector('.nv');
       if (nv) nv.textContent = el.value;
+    }
+  });
+});
+
+// Filter type — radio buttons
+document.querySelectorAll('#filter-type-group input[type="radio"]').forEach(radio => {
+  radio.addEventListener('change', () => {
+    if (radio.checked && window.rubyOnParamUpdate) {
+      window.rubyOnParamUpdate('filter:filter_type', radio.value);
     }
   });
 });
