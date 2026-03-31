@@ -274,7 +274,9 @@ JS responsibilities (exhaustive):
 3. UI event listeners → `rubyOnParamUpdate` bridge
 4. `_audioParamBatchUpdate` helper (AudioParam updates, 1 call/frame)
 5. `_audioReleaseVoice` helper (release voice trigger)
-6. Memory monitor
+6. `_createReverbIR(decay)` helper (ConvolverNode impulse response buffer generation)
+7. `_createDistortionCurve(drive)` helper (WaveShaperNode curve generation — gabber-aggressive d²/25 scaling)
+8. Memory monitor
 
 JS does NOT: touch Web Audio nodes directly, manage state, update DOM text.
 
