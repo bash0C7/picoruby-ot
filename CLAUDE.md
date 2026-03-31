@@ -36,6 +36,30 @@ When implementing:
 Read files first. Use subagent `explore` for complex investigations.
 </investigate_before_answering>
 
+<debugging_protocol>
+**Before ANY fix, read the relevant source:**
+- GPIO pins → check `src_components/R2P2-ESP32/CLAUDE.md` GPIO Mapping table FIRST
+- Config fields, JSON paths → read the actual config/source file
+- DOM selectors → read `web/index.html` before assuming attribute names
+- API method names → grep the codebase, never guess
+
+Do NOT propose a fix until you have quoted the current value from source.
+</debugging_protocol>
+
+<scope_discipline>
+**Only modify files explicitly in scope for the current task.**
+- If you identify a needed change outside scope, TELL THE USER and wait
+- Never touch files in sibling apps (e.g. don't edit otma.rb when working on otmeiwa.rb)
+- Sub-agents: state your scope at the start and reject out-of-scope file edits
+</scope_discipline>
+
+<permissions>
+**Always use minimal/least-privilege.**
+- Never propose wildcard tool permissions
+- Request only the specific tools/files needed for the task
+- If unsure what's needed, ask rather than broadening scope
+</permissions>
+
 ## Commands
 
 ⚠️ Do NOT execute `rake` commands autonomously without user approval.
