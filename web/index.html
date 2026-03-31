@@ -847,15 +847,15 @@ window._createReverbIR = function(decaySeconds) {
   return buffer;
 };
 
-// Distortion: tanh soft-clip curve, drive controls hardness
+// Distortion: hard-clip tanh curve for hardcore/gabber character
+// drive=1→k=0.04(linear), drive=50→k=100(heavy), drive=100→k=400(square wave)
 window._createDistortionCurve = function(drive) {
-  var n = 256;
+  var n = 512;
   var curve = new Float32Array(n);
-  var d = Math.max(1, drive);
-  var norm = Math.tanh(d / 100) + 0.001;
+  var k = Math.max(0.04, drive * drive / 25);
   for (var i = 0; i < n; i++) {
     var x = (i * 2) / n - 1;
-    curve[i] = Math.tanh((d / 100) * x) / norm;
+    curve[i] = Math.tanh(k * x);
   }
   return curve;
 };
