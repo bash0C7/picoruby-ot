@@ -28,6 +28,24 @@ Chrome (web/index.html)
   ruby.wasm → SensorMapper → FM Synthesizer (Web Audio API)
 ```
 
+## Apps
+
+| File | Description |
+|------|-------------|
+| `otmeiwa.rb` | Distance + accel sensor → USB Serial → Chrome FM synth |
+| `otma.rb` | Auto drum machine (MIDI out, 16-step sequencer, WS2812 LED) |
+| `otpwm.rb` | Distance sensor → PWM speaker (standalone) |
+| `otdr.rb` | MIDI soft-through gateway (Power Drums, button/crash LED flash) |
+
+### otdr.rb — MIDI Soft-Through Gateway
+
+Receives MIDI drum notes and forwards them unchanged (soft-through).
+No auto-play. Button press flashes all LEDs. Crash cymbal (note 49) also triggers flash.
+LED color reacts to incoming MIDI note groups.
+Initialized with GM2 Power Kit (Program Change 16).
+
+Build: `rake build APP=otdr && rake flash`
+
 ## Build
 
 See `src_components/R2P2-ESP32/CLAUDE.md` for build instructions.
