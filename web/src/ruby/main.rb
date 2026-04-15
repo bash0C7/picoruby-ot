@@ -11,6 +11,8 @@ class SynthApp
     @attack = 0.01
     @release = 0.3
     @volume = 0.4
+    @muted = false
+    @stashed_volume = nil
     @mute_dist = nil
     @cm_ratio = 1.0
     @serial_monitor_text = ""
@@ -67,8 +69,8 @@ class SynthApp
   def on_receive(data)
     frames = @serial.receive(data.to_s)
     return if frames.empty?
-    frames.each do |frame|
-      next unless frame
+    frame = frames.last  # 最新フレームのみ処理 (latency削減)
+    if frame
       begin
         update(frame[:distance], frame[:ax], frame[:ay], frame[:az])
       rescue => e
@@ -120,6 +122,17 @@ class SynthApp
     when "accel_scale" then @mapper.accel_scale = value.to_f
     when "cm_ratio"    then @cm_ratio = value.to_f
     when "feedback"    then @adapter&.set_feedback(value.to_f)
+    when "mute"
+      if @muted
+        @muted = false
+        @volume = @stashed_volume if @stashed_volume
+        @adapter&.update_gain(@volume, @attack)
+      else
+        @stashed_volume = @volume
+        @muted = true
+        @adapter&.update_gain(0.0, 0.005)
+      end
+      update_mute_button(@muted)
     when "fx_type"
       type = value.to_s
       @adapter&.update_param("fx", "fx_type", type)
@@ -246,6 +259,21 @@ class SynthApp
     @serial_monitor_text = (line + "\n" + @serial_monitor_text)[0, 2000]
     begin
       @el_serial[:textContent] = @serial_monitor_text
+    rescue JS::Error
+    end
+  end
+
+  # ミュートボタン表示更新
+  def update_mute_button(muted)
+    btn = JS.global[:document].querySelector("#btn-mute")
+    begin
+      if muted
+        btn[:textContent] = "Unmute"
+        btn[:classList].add("active")
+      else
+        btn[:textContent] = "Mute"
+        btn[:classList].remove("active")
+      end
     rescue JS::Error
     end
   end

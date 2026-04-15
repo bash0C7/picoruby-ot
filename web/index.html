@@ -366,6 +366,7 @@
   <button id="btn-connect">Connect</button>
   <button id="btn-disconnect">Disconnect</button>
   <button id="btn-init-audio">Init Audio</button>
+  <button id="btn-mute">Mute</button>
   <span>Status:</span>
   <span id="serial-status">●</span>
   <span id="mem-display">Mem:--</span>
@@ -686,7 +687,7 @@
 <script type="text/ruby" src="src/ruby/sensor_mapper.rb?v=20260330j"></script>
 <script type="text/ruby" src="src/ruby/preset_manager.rb?v=20260330i"></script>
 <script type="text/ruby" src="src/ruby/ui_controller.rb?v=20260330s"></script>
-<script type="text/ruby" src="src/ruby/main.rb?v=20260330j"></script>
+<script type="text/ruby" src="src/ruby/main.rb?v=20260415a"></script>
 
 <script>
 // ============================================================
@@ -1009,6 +1010,11 @@ document.querySelectorAll('.curve-buttons button').forEach(btn => {
     const prefix = group.dataset.curveTarget;
     if (window.rubyOnParamUpdate) window.rubyOnParamUpdate(prefix + '_curve', e.target.dataset.curve);
   });
+});
+
+// Mute button
+document.getElementById('btn-mute').addEventListener('click', () => {
+  if (window.rubyOnParamUpdate) window.rubyOnParamUpdate('mute', '1');
 });
 
 // Node controls — sliders and selects (select は waveform のみ残存)
