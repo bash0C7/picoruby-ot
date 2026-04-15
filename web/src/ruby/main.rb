@@ -69,8 +69,8 @@ class SynthApp
   def on_receive(data)
     frames = @serial.receive(data.to_s)
     return if frames.empty?
-    frame = frames.last  # 最新フレームのみ処理 (latency削減)
-    if frame
+    frames.each do |frame|
+      next unless frame
       begin
         update(frame[:distance], frame[:ax], frame[:ay], frame[:az])
       rescue => e
