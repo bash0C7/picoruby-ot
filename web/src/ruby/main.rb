@@ -129,6 +129,7 @@ class SynthApp
         @adapter&.update_gain(@volume, @attack)
       else
         @stashed_volume = @volume
+        @volume = 0.0
         @muted = true
         @adapter&.update_gain(0.0, 0.005)
       end
