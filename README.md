@@ -7,9 +7,14 @@ Built with M5 ATOM Matrix (ESP32) + PicoRuby + Chrome Web Audio.
 
 ## Hardware
 
-- M5 ATOM Matrix (ESP32-PICO-D4)
-- Unit ToF (VL53L0X laser distance sensor)
-- USB cable to PC running Chrome
+| Component | Link |
+|-----------|------|
+| M5 ATOM Matrix (ESP32-PICO-D4) | [スイッチサイエンス](https://ssci.to/6260) |
+| Unit ToF (VL53L0X laser distance sensor) | [スイッチサイエンス](https://ssci.to/5219) |
+| LED Stick (10 RGB LEDs) | [スイッチサイエンス](https://ssci.to/5953) |
+| Acrylic pipe, 4mm diameter × 1m, ×2 | (ホームセンター等) |
+| USB cable | — |
+| PC running Chrome | (verified: MacBook Air M3 13-inch 2024) |
 
 ## How it works
 
@@ -46,7 +51,14 @@ Initialized with GM2 Power Kit (Program Change 16).
 
 Build: `rake build APP=otdr && rake flash`
 
-## Build
+## Reproducing This Instrument
+
+All components listed above are commercially available. With this repository and the hardware, you can build the exact same instrument shown at the exhibition.
+
+### 1. Set up the build environment
+
+Follow the [mruby girls ESP32 guide](https://mrubygirls.github.io/guides/esp32/) to install the ESP-IDF toolchain and R2P2-ESP32 firmware.
+
+### 2. Build and flash
 
 See `src_components/R2P2-ESP32/CLAUDE.md` for build instructions.
-Requires: ESP-IDF toolchain, R2P2-ESP32 firmware.
