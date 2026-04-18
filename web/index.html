@@ -1,0 +1,1086 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>picoruby-ot Synth</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #1a1a2e;
+      color: #ccc;
+      font-family: monospace;
+      font-size: 16px;
+      width: 100vw;
+      overflow-x: hidden;
+    }
+
+    /* ── Header Bar ── */
+    #header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      background: #12122a;
+      border-bottom: 1px solid #2a2a4a;
+      flex-wrap: wrap;
+    }
+    #header button {
+      padding: 8px 16px;
+      background: #1e1e3a;
+      border: 1px solid #4444aa;
+      color: #aab;
+      cursor: pointer;
+      font-family: monospace;
+      font-size: 15px;
+      border-radius: 3px;
+    }
+    #header button:hover { border-color: #4caf50; color: #4caf50; }
+    #header #btn-init-audio { border-color: #6644cc; color: #9977ee; }
+    #serial-status { font-size: 24px; color: #f44336; line-height: 1; }
+    #mem-display { font-size: 11px; color: #555; font-family: monospace; white-space: nowrap; }
+    #header-spacer { flex: 1; }
+    #note-info {
+      display: flex;
+      gap: 12px;
+      font-size: 16px;
+      color: #aaa;
+    }
+    #note-display { color: #4caf50; font-weight: bold; font-size: 20px; }
+    #freq-display { color: #6cf; font-size: 16px; }
+    #dist-display { color: #fc6; font-size: 16px; }
+    #fm-depth-display { color: #f9a; font-size: 16px; }
+
+    /* ── Main Area ── */
+    #main { padding: 10px 12px; }
+
+    /* ── Section common ── */
+    .sec {
+      background: #14142a;
+      border: 1px solid #2a2a4a;
+      border-radius: 5px;
+      padding: 10px 12px;
+      margin-bottom: 10px;
+    }
+    .sec-title {
+      color: #7777cc;
+      font-size: 14px;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+    }
+
+    /* ── Synth Patch Graph ── */
+    #patch-graph {
+      display: flex;
+      align-items: flex-start;
+      gap: 0;
+      overflow-x: auto;
+      padding-bottom: 4px;
+    }
+
+    /* Arrow between nodes */
+    .node-arrow {
+      display: flex;
+      align-items: center;
+      color: #4caf50;
+      font-size: 16px;
+      padding: 0 4px;
+      align-self: center;
+      margin-top: 16px;
+    }
+    .node-arrow.fm {
+      color: #6644cc;
+      font-size: 12px;
+      flex-direction: column;
+      align-self: flex-start;
+      margin-top: 4px;
+      padding: 0 2px;
+    }
+
+    /* Node box */
+    .node {
+      background: #0e0e1e;
+      border: 1px solid #2a2a6a;
+      border-radius: 4px;
+      padding: 10px 14px;
+      min-width: 160px;
+      flex-shrink: 0;
+    }
+    .node-title {
+      font-size: 13px;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid #2a2a4a;
+    }
+    .node.fm-mod .node-title   { color: #9966ff; border-color: #4433aa; }
+    .node.fm-carrier .node-title { color: #9966ff; border-color: #4433aa; }
+    .node.mixer .node-title    { color: #cc88ff; border-color: #552299; }
+    .node.filter .node-title   { color: #ffaa44; border-color: #664422; }
+    .node.master .node-title   { color: #4caf50; border-color: #225533; }
+
+    .node-row {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      margin-bottom: 4px;
+    }
+    .node-row label {
+      width: 52px;
+      color: #666;
+      font-size: 13px;
+      flex-shrink: 0;
+    }
+    .node-row input[type="range"] {
+      flex: 1;
+      accent-color: #4caf50;
+      height: 18px;
+      min-width: 60px;
+    }
+    .node-row select {
+      flex: 1;
+      background: #1a1a2e;
+      color: #aaa;
+      border: 1px solid #444;
+      font-family: monospace;
+      font-size: 13px;
+      padding: 1px 3px;
+      border-radius: 2px;
+    }
+    .node-row .nv {
+      width: 36px;
+      text-align: right;
+      color: #777;
+      font-size: 13px;
+      flex-shrink: 0;
+    }
+    .radio-group {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .radio-label {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      font-size: 13px;
+      color: #aaa;
+      cursor: pointer;
+    }
+    .radio-label input[type="radio"] {
+      accent-color: #4caf50;
+    }
+
+    /* FM mod group (vertically stacked above carrier) */
+    #fm-group {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0;
+      flex-shrink: 0;
+    }
+    #fm-arrow-vert {
+      color: #6644cc;
+      font-size: 12px;
+      text-align: center;
+      line-height: 1.4;
+      padding: 2px 0;
+    }
+
+    /* ── Mid Panel ── */
+    #mid-panel {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    /* Curve buttons */
+    .curve-buttons {
+      display: flex;
+      gap: 3px;
+      margin-bottom: 4px;
+    }
+    .curve-buttons button {
+      padding: 4px 12px;
+      background: #1a1a2e;
+      border: 1px solid #333;
+      color: #777;
+      cursor: pointer;
+      font-family: monospace;
+      font-size: 13px;
+      border-radius: 2px;
+    }
+    .curve-buttons button:hover { border-color: #4caf50; color: #4caf50; }
+    .curve-buttons button.active { border-color: #4caf50; color: #4caf50; background: #0a1a0a; }
+    .curve-label {
+      color: #555;
+      font-size: 13px;
+      margin-bottom: 3px;
+    }
+    canvas.curve-canvas {
+      display: block;
+      width: 100%;
+      height: 50px;
+      border: 1px solid #1e1e3a;
+      border-radius: 2px;
+      margin-bottom: 6px;
+    }
+
+    /* Transport buttons */
+    .btn-group {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+      margin-bottom: 6px;
+    }
+    .btn-group button {
+      padding: 6px 16px;
+      background: #1a1a2e;
+      border: 1px solid #333;
+      color: #888;
+      cursor: pointer;
+      font-family: monospace;
+      font-size: 14px;
+      border-radius: 3px;
+    }
+    .btn-group button:hover { border-color: #4caf50; color: #4caf50; }
+    .btn-group button.active { border-color: #4caf50; color: #4caf50; background: #0a150a; }
+
+    .ctrl-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+    .ctrl-row label { width: 64px; color: #666; font-size: 13px; flex-shrink: 0; }
+    .ctrl-row input[type="range"] { flex: 1; accent-color: #4caf50; height: 18px; }
+    .ctrl-row .cv { width: 40px; text-align: right; color: #777; font-size: 13px; flex-shrink: 0; }
+
+    /* Octave control */
+    #oct-display {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+    #oct-display label { color: #666; font-size: 13px; }
+    #oct-display .oct-dots {
+      display: flex;
+      gap: 3px;
+    }
+    .oct-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #333;
+      border: 1px solid #444;
+    }
+    .oct-dot.active { background: #4caf50; border-color: #4caf50; }
+    #oct-display button {
+      padding: 4px 12px;
+      background: #1a1a2e;
+      border: 1px solid #333;
+      color: #888;
+      cursor: pointer;
+      font-family: monospace;
+      font-size: 14px;
+      border-radius: 2px;
+    }
+    #oct-display button:hover { border-color: #4caf50; color: #4caf50; }
+
+    /* ── Audio Monitor ── */
+    #audio-monitor {
+      display: grid;
+      grid-template-columns: 3fr 1fr;
+      gap: 8px;
+      align-items: stretch;
+    }
+    canvas#oscilloscope {
+      display: block;
+      width: 100%;
+      height: 80px;
+      border: 1px solid #1e1e3a;
+      border-radius: 3px;
+    }
+    canvas#level-meter {
+      display: block;
+      width: 100%;
+      height: 80px;
+      border: 1px solid #1e1e3a;
+      border-radius: 3px;
+    }
+
+    /* ── Serial & Test (collapsible) ── */
+    details { margin-bottom: 10px; }
+    details summary {
+      color: #7777cc;
+      font-size: 10px;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      cursor: pointer;
+      padding: 8px 12px;
+      background: #14142a;
+      border: 1px solid #2a2a4a;
+      border-radius: 5px;
+      list-style: none;
+    }
+    details summary::-webkit-details-marker { display: none; }
+    details summary::before { content: "▶ "; color: #4444aa; }
+    details[open] summary {
+      border-bottom-left-radius: 0;
+      border-bottom-right-radius: 0;
+      border-bottom: none;
+    }
+    details[open] summary::before { content: "▼ "; }
+    .details-body {
+      background: #14142a;
+      border: 1px solid #2a2a4a;
+      border-top: none;
+      border-bottom-left-radius: 5px;
+      border-bottom-right-radius: 5px;
+      padding: 10px 12px;
+    }
+    #serial-monitor {
+      background: #080812;
+      border: 1px solid #1a1a3a;
+      border-radius: 3px;
+      padding: 6px;
+      height: 60px;
+      overflow-y: auto;
+      font-size: 10px;
+      color: #4caf50;
+      word-break: break-all;
+      line-height: 1.4;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Header Bar ── -->
+<div id="header">
+  <button id="btn-connect">Connect</button>
+  <button id="btn-disconnect">Disconnect</button>
+  <button id="btn-init-audio">Init Audio</button>
+  <button id="btn-mute">Mute</button>
+  <span>Status:</span>
+  <span id="serial-status">●</span>
+  <span id="mem-display">Mem:--</span>
+  <div id="header-spacer"></div>
+  <div id="note-info">
+    <span>Note: <span id="note-display">--</span></span>
+    <span><span id="freq-display">--</span></span>
+    <span><span id="dist-display">--</span></span>
+    <span>FM:<span id="fm-depth-display">0.00</span></span>
+  </div>
+</div>
+
+<div id="main">
+
+  <!-- ── Synth Patch Graph ── -->
+  <div class="sec">
+    <div class="sec-title">Synth Patch Graph</div>
+    <div id="patch-graph">
+
+      <!-- FM Mod + FM Carrier stacked vertically with arrow -->
+      <div id="fm-group">
+        <!-- FM Mod node -->
+        <div class="node fm-mod">
+          <div class="node-title">FM Mod</div>
+          <div class="node-row">
+            <label>Wave</label>
+            <select data-param="fm_mod:waveform">
+              <option value="triangle" selected>triangle</option>
+              <option value="sine">sine</option>
+              <option value="square">square</option>
+              <option value="sawtooth">sawtooth</option>
+            </select>
+          </div>
+          <div class="node-row">
+            <label>Freq</label>
+            <input type="range" min="20" max="2000" value="220" data-param="fm_mod:freq">
+            <span class="nv">220</span>
+          </div>
+          <div class="node-row">
+            <label>Amp</label>
+            <input type="range" min="0" max="500" value="50" data-param="fm_mod:amp">
+            <span class="nv">50</span>
+          </div>
+        </div>
+
+        <!-- Vertical FM arrow -->
+        <div id="fm-arrow-vert">│<br>FM<br>▼</div>
+
+        <!-- FM Carrier node -->
+        <div class="node fm-carrier">
+          <div class="node-title">FM Carrier</div>
+          <div class="node-row">
+            <label>Wave</label>
+            <select data-param="fm_carrier:waveform">
+              <option value="triangle" selected>triangle</option>
+              <option value="sine">sine</option>
+              <option value="square">square</option>
+              <option value="sawtooth">sawtooth</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Arrow: Carrier → Mixer -->
+      <div class="node-arrow">→</div>
+
+      <!-- Mixer node -->
+      <div class="node mixer">
+        <div class="node-title">Mixer</div>
+        <div class="node-row">
+          <label>Gain</label>
+          <input type="range" min="0" max="2" step="0.01" value="1" data-param="mixer:gain">
+          <span class="nv">1.0</span>
+        </div>
+      </div>
+
+      <!-- Arrow: Mixer → Filter -->
+      <div class="node-arrow">→</div>
+
+      <!-- Filter node -->
+      <div class="node filter">
+        <div class="node-title">Filter</div>
+        <div class="node-row filter-type-row">
+          <label>Type</label>
+          <div class="radio-group" id="filter-type-group">
+            <label class="radio-label"><input type="radio" name="filter_type" value="lowpass" checked> Low Pass</label>
+            <label class="radio-label"><input type="radio" name="filter_type" value="highpass"> High Pass</label>
+            <label class="radio-label"><input type="radio" name="filter_type" value="bandpass"> Band Pass</label>
+            <label class="radio-label"><input type="radio" name="filter_type" value="notch"> Notch</label>
+          </div>
+        </div>
+        <div class="node-row">
+          <label>Cutoff</label>
+          <input type="range" min="20" max="20000" value="800" data-param="filter:cutoff">
+          <span class="nv">800</span>
+        </div>
+        <div class="node-row">
+          <label>Q</label>
+          <input type="range" min="0.1" max="20" step="0.1" value="1.2" data-param="filter:q">
+          <span class="nv">1.2</span>
+        </div>
+      </div>
+
+      <!-- Arrow: Filter → FX -->
+      <div class="node-arrow">→</div>
+
+      <!-- FX node -->
+      <div class="node fx">
+        <div class="node-title" id="fx-graph-label">FX</div>
+        <div class="node-row">
+          <div class="btn-group" id="fx-type-group">
+            <button data-fx="none" class="active">Off</button>
+            <button data-fx="echo">Echo</button>
+            <button data-fx="reverb">Reverb</button>
+            <button data-fx="distortion">Dist</button>
+          </div>
+        </div>
+        <div class="node-row">
+          <label>Mix</label>
+          <input type="range" min="0" max="1" step="0.01" value="0.5" data-param="fx:mix">
+          <span class="nv">0.50</span>
+        </div>
+        <div class="node-row fx-params" id="fx-echo-params" style="display:none">
+          <label>Dly</label>
+          <input type="range" min="0.05" max="1.0" step="0.01" value="0.20" data-param="fx:delay_time">
+          <span class="nv">0.20</span>
+          <label>FB</label>
+          <input type="range" min="0" max="0.95" step="0.01" value="0.40" data-param="fx:feedback">
+          <span class="nv">0.40</span>
+        </div>
+        <div class="node-row fx-params" id="fx-reverb-params" style="display:none">
+          <label>Dec</label>
+          <input type="range" min="0.5" max="4.0" step="0.1" value="2.0" data-param="fx:decay">
+          <span class="nv">2.0</span>
+        </div>
+        <div class="node-row fx-params" id="fx-distortion-params" style="display:none">
+          <label>Drv</label>
+          <input type="range" min="1" max="100" step="1" value="50" data-param="fx:drive">
+          <span class="nv">50</span>
+          <label>Tone</label>
+          <input type="range" min="500" max="8000" step="100" value="3000" data-param="fx:tone">
+          <span class="nv">3000</span>
+        </div>
+      </div>
+
+      <!-- Arrow: FX → Master -->
+      <div class="node-arrow">→</div>
+
+      <!-- Master node -->
+      <div class="node master">
+        <div class="node-title">Master</div>
+        <div class="node-row">
+          <label>Gain</label>
+          <input type="range" min="0" max="1" step="0.01" value="0.4" data-param="master:gain">
+          <span class="nv">0.4</span>
+        </div>
+      </div>
+
+      <!-- Output indicator -->
+      <div class="node-arrow">→ ♪</div>
+
+    </div>
+  </div>
+
+  <!-- ── Mid Panel ── -->
+  <div id="mid-panel">
+
+    <!-- Left: Sensor Mapping Curves -->
+    <div class="sec">
+      <div class="sec-title">Sensor Mapping</div>
+
+      <div class="curve-label">Accel → FM Depth</div>
+      <div class="curve-buttons" data-curve-target="accel">
+        <button data-curve="linear" class="active">Lin</button>
+        <button data-curve="log">Log</button>
+        <button data-curve="exp">Exp</button>
+        <button data-curve="s_curve">S</button>
+      </div>
+      <canvas class="curve-canvas" id="accel-curve-canvas" width="200" height="50"></canvas>
+    </div>
+
+    <!-- Right: Transport -->
+    <div class="sec">
+      <div class="sec-title">Transport</div>
+
+      <!-- Presets -->
+      <div id="presets" class="btn-group">
+        <button data-preset="otamatone" class="active">Otamatone</button>
+        <button data-preset="clean">Clean</button>
+        <button data-preset="acid">Acid</button>
+        <button data-preset="retro">Retro</button>
+      </div>
+
+      <!-- Octave -->
+      <div id="oct-display">
+        <label>Oct</label>
+        <button id="oct-down">◀</button>
+        <div class="oct-dots">
+          <div class="oct-dot" id="oct-dot-0"></div>
+          <div class="oct-dot" id="oct-dot-1"></div>
+          <div class="oct-dot active" id="oct-dot-2"></div>
+          <div class="oct-dot" id="oct-dot-3"></div>
+          <div class="oct-dot" id="oct-dot-4"></div>
+        </div>
+        <button id="oct-up">▶</button>
+      </div>
+
+      <!-- Glide, Attack, Release sliders -->
+      <div class="ctrl-row">
+        <label>Glide</label>
+        <input type="range" id="glide" min="0" max="200" value="20">
+        <span class="cv" id="glide-val">20ms</span>
+      </div>
+      <div class="ctrl-row">
+        <label>Attack</label>
+        <input type="range" id="attack" min="1" max="2000" value="10">
+        <span class="cv" id="attack-val">10ms</span>
+      </div>
+      <div class="ctrl-row">
+        <label>Release</label>
+        <input type="range" id="release" min="10" max="5000" value="300">
+        <span class="cv" id="release-val">300ms</span>
+      </div>
+      <div class="ctrl-row">
+        <label>C:M</label>
+        <input type="range" id="cm-ratio" min="0.1" max="8.0" step="0.01" value="1.0">
+        <span class="cv" id="cm-ratio-val">1.00</span>
+      </div>
+      <div class="ctrl-row">
+        <label>FB</label>
+        <input type="range" id="feedback" min="0.0" max="1.0" step="0.01" value="0.0">
+        <span class="cv" id="feedback-val">0.00</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── Audio Monitor (collapsible) ── -->
+  <details open>
+    <summary>Audio Monitor</summary>
+    <div class="details-body">
+      <div id="audio-monitor">
+        <canvas id="oscilloscope" width="800" height="80"></canvas>
+        <canvas id="level-meter" width="200" height="80"></canvas>
+      </div>
+    </div>
+  </details>
+
+  <!-- ── Serial Monitor (collapsible) ── -->
+  <details>
+    <summary>Serial Monitor</summary>
+    <div class="details-body">
+      <div id="serial-monitor"></div>
+    </div>
+  </details>
+
+  <!-- ── Test Mode (collapsible) ── -->
+  <details>
+    <summary>Test Mode (no hardware)</summary>
+    <div class="details-body">
+      <div class="btn-group" style="margin-bottom:8px">
+        <button id="test-send">Send Frame</button>
+      </div>
+      <div class="ctrl-row">
+        <label>Dist mm</label>
+        <input type="range" id="test-dist" min="20" max="900" value="450">
+        <span class="cv" id="test-dist-val">450</span>
+      </div>
+      <div class="ctrl-row">
+        <label>AX</label>
+        <input type="range" id="test-ax" min="-1000" max="1000" value="0">
+        <span class="cv" id="test-ax-val">0</span>
+      </div>
+      <div class="ctrl-row">
+        <label>AY</label>
+        <input type="range" id="test-ay" min="-1000" max="1000" value="0">
+        <span class="cv" id="test-ay-val">0</span>
+      </div>
+      <div class="ctrl-row">
+        <label>AZ</label>
+        <input type="range" id="test-az" min="-1000" max="1000" value="0">
+        <span class="cv" id="test-az-val">0</span>
+      </div>
+    </div>
+  </details>
+
+</div><!-- /#main -->
+
+<!-- ── WASM memory growth interceptor (must run before ruby.wasm loads) ── -->
+<script>
+(function() {
+  var orig = WebAssembly.Memory.prototype.grow;
+  window._wasmGrowLog = [];
+  WebAssembly.Memory.prototype.grow = function(delta) {
+    window._wasmMemory = this;
+    var before = this.buffer.byteLength;
+    var r = orig.call(this, delta);
+    var after = this.buffer.byteLength;
+    window._wasmGrowLog.push({ t: Date.now(), mb: Math.round(after/1024/1024) });
+    if (window._wasmGrowLog.length > 200) window._wasmGrowLog.shift();
+    return r;
+  };
+})();
+</script>
+<!-- ── ruby.wasm ── -->
+<script src="https://cdn.jsdelivr.net/npm/@ruby/4.0-wasm-wasi@2.8.1/dist/browser.script.iife.js"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/audio_adapter.rb?v=20260330h"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/node.rb?v=20260330i"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/osc_node.rb?v=20260330h"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/fm_op_node.rb?v=20260330h"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/filter_node.rb?v=20260330h"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/gain_node.rb?v=20260330h"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/mixer_node.rb?v=20260330h"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/fx_node.rb?v=20260330i"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/synth_patch.rb?v=20260330h"></script>
+<script type="text/ruby" src="src/ruby/synth_patch/web_adapter.rb?v=20260330i"></script>
+<script type="text/ruby" src="src/ruby/serial.rb?v=20260330h"></script>
+<script type="text/ruby" src="src/ruby/sensor_mapper.rb?v=20260330j"></script>
+<script type="text/ruby" src="src/ruby/preset_manager.rb?v=20260330i"></script>
+<script type="text/ruby" src="src/ruby/ui_controller.rb?v=20260330s"></script>
+<script type="text/ruby" src="src/ruby/main.rb?v=20260415c"></script>
+
+<script>
+// ============================================================
+// Web Serial — async API kept in JS
+// ============================================================
+let serialPort = null;
+let serialReader = null;
+
+document.getElementById('btn-connect').addEventListener('click', async () => {
+  try {
+    serialPort = await navigator.serial.requestPort();
+    await serialPort.open({ baudRate: 115200 });
+    const decoder = new TextDecoderStream();
+    serialPort.readable.pipeTo(decoder.writable).catch(e => {
+      console.error('[Serial pipeTo]', e);
+    });
+    serialReader = decoder.readable.getReader();
+    if (window.rubySerialOnConnect) window.rubySerialOnConnect(115200);
+    document.getElementById('serial-status').textContent = '●';
+    document.getElementById('serial-status').style.color = '#4caf50';
+    readLoop();
+  } catch (e) { console.error('Serial:', e); }
+});
+
+document.getElementById('btn-disconnect').addEventListener('click', async () => {
+  try {
+    if (serialReader) { await serialReader.cancel(); serialReader = null; }
+    if (serialPort)   { await serialPort.close();   serialPort   = null; }
+    if (window.rubySerialOnDisconnect) window.rubySerialOnDisconnect();
+    document.getElementById('serial-status').textContent = '●';
+    document.getElementById('serial-status').style.color = '#f44336';
+  } catch (e) { console.error('Serial disconnect:', e); }
+});
+
+function notifyWasmCrash(msg) {
+  document.body.style.background = '#3a0000';
+  var el = document.getElementById('serial-status');
+  if (el) { el.textContent = '☠'; el.style.color = '#ff4444'; el.style.fontSize = '28px'; }
+  var mem = document.getElementById('mem-display');
+  if (mem) mem.style.color = '#ff6666';
+  var banner = document.getElementById('wasm-crash-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'wasm-crash-banner';
+    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;padding:8px 16px;background:#ff2222;color:#fff;font-weight:bold;font-size:14px;z-index:9999;text-align:center;';
+    document.body.prepend(banner);
+  }
+  banner.textContent = '⚠ WASM crash: ' + msg + ' — リロードしてください (Reload)';
+}
+
+async function readLoop() {
+  while (serialReader) {
+    try {
+      const { value, done } = await serialReader.read();
+      if (done) { console.log('[Serial] stream ended'); break; }
+      if (value && window.rubySerialOnReceive) window.rubySerialOnReceive(value);
+    } catch (e) {
+      console.error('[Serial readLoop]', e.message);
+      if (e.message && e.message.includes('offset')) notifyWasmCrash(e.message);
+      break;
+    }
+  }
+}
+
+window.addEventListener('error', function(e) {
+  if (e.message && e.message.includes('offset')) notifyWasmCrash(e.message);
+});
+window.addEventListener('unhandledrejection', function(e) {
+  var msg = e.reason && e.reason.message ? e.reason.message : String(e.reason);
+  if (msg.includes('offset')) notifyWasmCrash(msg);
+});
+
+// ============================================================
+// Memory monitor (10s interval) — tracks actual WASM heap bytes
+// ============================================================
+(function() {
+  var _samples = [];
+  var CRASH_LIMIT = 2 * 1024 * 1024 * 1024;
+  function tick() {
+    var wasmMem = window.rubyVM && window.rubyVM.instance && window.rubyVM.instance.exports && window.rubyVM.instance.exports.memory;
+    var wasmBytes = wasmMem ? wasmMem.buffer.byteLength : 0;
+    var wasmMB = Math.round(wasmBytes / 1024 / 1024);
+    var now = Date.now();
+    _samples.push({ t: now, bytes: wasmBytes });
+    if (_samples.length > 18) _samples.shift();
+    var eta = '';
+    if (_samples.length >= 2) {
+      var s0 = _samples[0], s1 = _samples[_samples.length - 1];
+      var dt = (s1.t - s0.t) / 1000;
+      var dBytes = s1.bytes - s0.bytes;
+      var rateMBmin = (dBytes / dt * 60 / 1024 / 1024).toFixed(1);
+      if (dBytes > 1024 * 1024 && dt > 0) {
+        var rate = dBytes / dt;
+        var sec = (CRASH_LIMIT - s1.bytes) / rate;
+        eta = sec < 3600
+          ? ' ETA~' + Math.round(sec / 60) + 'm (+' + rateMBmin + 'MB/m)'
+          : ' ETA~' + (sec / 3600).toFixed(1) + 'h (+' + rateMBmin + 'MB/m)';
+      } else {
+        eta = ' stable (+' + rateMBmin + 'MB/m)';
+      }
+    }
+    var el = document.getElementById('mem-display');
+    if (el) el.textContent = 'WASM:' + wasmMB + 'MB' + eta;
+  }
+  tick();
+  setInterval(tick, 10000);
+})();
+
+// ============================================================
+// AudioParam batch update helpers (reduce ruby.wasm JS::Object allocations)
+// Ruby calls once/frame instead of 10+ individual AudioParam calls.
+// ============================================================
+window._audioParamBatchUpdate = function(carrierFreq, modFreq, fmDepthScaled, glide, targetGain, gainTc) {
+  var ctx = window._audioCtx;
+  if (!ctx) return;
+  var now = ctx.currentTime;
+  var tc = glide > 0.001 ? glide : 0.001;
+  if (window._carrierFreqParam) {
+    window._carrierFreqParam.cancelAndHoldAtTime(now);
+    window._carrierFreqParam.setTargetAtTime(carrierFreq, now, tc);
+  }
+  if (window._modFreqParam) {
+    window._modFreqParam.cancelAndHoldAtTime(now);
+    window._modFreqParam.setTargetAtTime(modFreq, now, tc);
+  }
+  if (window._modGainParam) {
+    window._modGainParam.cancelAndHoldAtTime(now);
+    window._modGainParam.setTargetAtTime(fmDepthScaled, now, 0.01);
+  }
+  if (window._masterGainParam) {
+    window._masterGainParam.cancelAndHoldAtTime(now);
+    window._masterGainParam.setTargetAtTime(targetGain, now, gainTc > 0.001 ? gainTc : 0.001);
+  }
+};
+
+window._setFeedbackAmount = function(amount) {
+  var ctx = window._audioCtx;
+  if (!ctx || !window._fbGainParam) return;
+  var now = ctx.currentTime;
+  window._fbGainParam.cancelAndHoldAtTime(now);
+  window._fbGainParam.setTargetAtTime(amount, now, 0.01);
+};
+
+// Reverb IR: white noise × exponential decay envelope
+window._createReverbIR = function(decaySeconds) {
+  var ctx = window._audioCtx;
+  if (!ctx) return null;
+  var sampleRate = ctx.sampleRate;
+  var length = Math.floor(sampleRate * Math.max(0.1, decaySeconds));
+  var buffer = ctx.createBuffer(2, length, sampleRate);
+  for (var c = 0; c < 2; c++) {
+    var data = buffer.getChannelData(c);
+    for (var i = 0; i < length; i++) {
+      var t = i / length;
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, 3);
+    }
+  }
+  return buffer;
+};
+
+// Distortion: hard-clip tanh curve for hardcore/gabber character
+// drive=1→k=0.04(linear), drive=50→k=100(heavy), drive=100→k=400(square wave)
+window._createDistortionCurve = function(drive) {
+  var n = 512;
+  var curve = new Float32Array(n);
+  var k = Math.max(0.04, drive * drive / 25);
+  for (var i = 0; i < n; i++) {
+    var x = (i * 2) / n - 1;
+    curve[i] = Math.tanh(k * x);
+  }
+  return curve;
+};
+
+window._audioReleaseVoice = function(oldFreq, gainVal, releaseTc) {
+  var ctx = window._audioCtx;
+  if (!ctx || !window._releaseGainParam || !window._releaseOsc) return;
+  var now = ctx.currentTime;
+  window._releaseOsc.frequency.value = oldFreq;
+  window._releaseGainParam.cancelAndHoldAtTime(now);
+  window._releaseGainParam.setValueAtTime(gainVal, now);
+  window._releaseGainParam.setTargetAtTime(0.0, now, releaseTc > 0.05 ? releaseTc : 0.05);
+};
+
+// Audio Monitor visibility check — details[open] attribute
+window._audioMonitorOpen = function() {
+  var el = document.getElementById('audio-monitor');
+  if (!el) return false;
+  var details = el.closest('details');
+  return details ? details.open : false;
+};
+
+// Serial Monitor visibility check — details[open] attribute
+window._serialMonitorOpen = function() {
+  var el = document.getElementById('serial-monitor');
+  if (!el) return false;
+  var details = el.closest('details');
+  return details ? details.open : false;
+};
+
+// ============================================================
+// Canvas drawing helpers — eliminate ~2048 JS::Object/frame from ruby.wasm
+// Both share window.analyserData (preallocated Float32Array) to avoid per-frame alloc.
+// ============================================================
+window._drawOscilloscope = function() {
+  var analyser = window.analyser;
+  var canvas = document.getElementById('oscilloscope');
+  if (!analyser || !canvas) return;
+  var ctx = canvas.getContext('2d');
+  var w = canvas.width, h = canvas.height;
+  var buf = window.analyserData;
+  if (!buf || buf.length === 0) {
+    buf = new Float32Array(analyser.frequencyBinCount);
+    window.analyserData = buf;
+  }
+  analyser.getFloatTimeDomainData(buf);
+  ctx.clearRect(0, 0, w, h);
+  ctx.strokeStyle = '#4caf50';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  var sliceW = w / buf.length;
+  for (var i = 0; i < buf.length; i++) {
+    var y = (buf[i] * 0.5 + 0.5) * h;
+    if (i === 0) ctx.moveTo(0, y); else ctx.lineTo(i * sliceW, y);
+  }
+  ctx.stroke();
+};
+
+window._drawLevelMeter = function() {
+  var analyser = window.analyser;
+  var canvas = document.getElementById('level-meter');
+  if (!analyser || !canvas) return;
+  var ctx = canvas.getContext('2d');
+  var w = canvas.width, h = canvas.height;
+  var buf = window.analyserData;
+  if (!buf || buf.length === 0) {
+    buf = new Float32Array(analyser.frequencyBinCount);
+    window.analyserData = buf;
+  }
+  analyser.getFloatTimeDomainData(buf);
+  var sum = 0;
+  for (var i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+  var rms = Math.sqrt(sum / buf.length);
+  var level = Math.min(rms * 2, 1.0);
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = level > 0.8 ? '#f44336' : '#4caf50';
+  ctx.fillRect(0, 0, Math.round(level * w), h);
+};
+
+// ============================================================
+// Audio init (requires user gesture)
+// ============================================================
+document.getElementById('btn-init-audio').addEventListener('click', () => {
+  const btn = document.getElementById('btn-init-audio');
+  if (btn.textContent === 'Audio Ready') {
+    location.reload();
+    return;
+  }
+  if (window.rubyInitAudio) {
+    window.rubyInitAudio();
+    btn.textContent = 'Audio Ready';
+    btn.style.borderColor = '#4caf50';
+    btn.style.color = '#4caf50';
+  }
+});
+
+// ============================================================
+// UI event bridge
+// ============================================================
+
+// Preset buttons
+document.querySelectorAll('#presets button').forEach(btn => {
+  btn.addEventListener('click', e => {
+    document.querySelectorAll('#presets button').forEach(b => b.classList.remove('active'));
+    e.target.classList.add('active');
+    if (window.rubyOnParamUpdate) window.rubyOnParamUpdate('preset', e.target.dataset.preset);
+  });
+});
+
+// Octave
+document.getElementById('oct-up').addEventListener('click', () => {
+  if (window.rubyOnParamUpdate) window.rubyOnParamUpdate('oct_up', '1');
+});
+document.getElementById('oct-down').addEventListener('click', () => {
+  if (window.rubyOnParamUpdate) window.rubyOnParamUpdate('oct_down', '1');
+});
+
+// Glide, Attack, Release sliders
+['glide', 'attack', 'release'].forEach(id => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('input', () => {
+    if (window.rubyOnParamUpdate) window.rubyOnParamUpdate(id, el.value);
+    const span = document.getElementById(id + '-val');
+    if (span) span.textContent = el.value + 'ms';
+  });
+});
+
+var cmEl = document.getElementById('cm-ratio');
+if (cmEl) {
+  cmEl.addEventListener('input', function() {
+    document.getElementById('cm-ratio-val').textContent = parseFloat(cmEl.value).toFixed(2);
+    if (window.rubyOnParamUpdate) rubyOnParamUpdate('cm_ratio', cmEl.value);
+  });
+}
+
+var fbEl = document.getElementById('feedback');
+if (fbEl) {
+  fbEl.addEventListener('input', function() {
+    document.getElementById('feedback-val').textContent = parseFloat(fbEl.value).toFixed(2);
+    if (window.rubyOnParamUpdate) rubyOnParamUpdate('feedback', fbEl.value);
+  });
+}
+
+// Curve buttons
+document.querySelectorAll('.curve-buttons button').forEach(btn => {
+  btn.addEventListener('click', e => {
+    const group = e.target.closest('.curve-buttons');
+    group.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+    e.target.classList.add('active');
+    const prefix = group.dataset.curveTarget;
+    if (window.rubyOnParamUpdate) window.rubyOnParamUpdate(prefix + '_curve', e.target.dataset.curve);
+  });
+});
+
+// Mute button
+document.getElementById('btn-mute').addEventListener('click', () => {
+  if (window.rubyOnParamUpdate) window.rubyOnParamUpdate('mute', '1');
+});
+
+// Node controls — sliders and selects (select は waveform のみ残存)
+document.querySelectorAll('.node input[type="range"], .node select').forEach(el => {
+  const event = el.tagName === 'SELECT' ? 'change' : 'input';
+  el.addEventListener(event, () => {
+    const paramKey = el.dataset.param;
+    if (paramKey && window.rubyOnParamUpdate) window.rubyOnParamUpdate(paramKey, el.value);
+    // Update adjacent value display
+    const row = el.closest('.node-row');
+    if (row && el.type === 'range') {
+      const nv = row.querySelector('.nv');
+      if (nv) nv.textContent = el.value;
+    }
+  });
+});
+
+// Filter type — radio buttons
+document.querySelectorAll('#filter-type-group input[type="radio"]').forEach(radio => {
+  radio.addEventListener('change', () => {
+    if (radio.checked && window.rubyOnParamUpdate) {
+      window.rubyOnParamUpdate('filter:filter_type', radio.value);
+    }
+  });
+});
+
+// FX type buttons
+document.querySelectorAll('#fx-type-group button[data-fx]').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    var fxType = this.getAttribute('data-fx');
+    document.querySelectorAll('.fx-params').forEach(function(el) { el.style.display = 'none'; });
+    if (fxType !== 'none') {
+      var paramEl = document.getElementById('fx-' + fxType + '-params');
+      if (paramEl) paramEl.style.display = '';
+    }
+    if (window.rubyOnParamUpdate) window.rubyOnParamUpdate('fx_type', fxType);
+  });
+});
+
+// Test sliders value display
+['test-dist', 'test-ax', 'test-ay', 'test-az'].forEach(id => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('input', () => {
+    const val = document.getElementById(id + '-val');
+    if (val) val.textContent = el.value;
+  });
+});
+
+// Test Mode — send frame
+const testSendBtn = document.getElementById('test-send');
+if (testSendBtn) {
+  testSendBtn.addEventListener('click', () => {
+    const d  = document.getElementById('test-dist').value;
+    const ax = document.getElementById('test-ax').value;
+    const ay = document.getElementById('test-ay').value;
+    const az = document.getElementById('test-az').value;
+    const dP  = String(d).padStart(4, '0');
+    const axP = String(Math.abs(+ax)).padStart(4, '0');
+    const ayP = String(Math.abs(+ay)).padStart(4, '0');
+    const azP = String(Math.abs(+az)).padStart(4, '0');
+    const frame = '<D:' + dP + ',AX:' + axP + ',AY:' + ayP + ',AZ:' + azP + '>\n';
+    if (window.rubySerialOnReceive) window.rubySerialOnReceive(frame);
+  });
+}
+
+</script>
+</body>
+</html>

@@ -1,224 +1,102 @@
-# picoruby-ot: ATOM Matrix Instrument Project
+# picoruby-ot: びことん
 
-A PicoRuby (R2P2-ESP32) application for **M5 ATOM Matrix (ESP32-PICO-D4)** featuring two interactive musical instruments: automatic MIDI drum machine and distance sensor synthesizer.
+明和電機のオタマトーンにインスパイアされたソフトウェア楽器。  
+A software musical instrument inspired by Maywa Denki's Otamatone.
 
-## Overview
+距離センサーで音程を操作。スティックを振ってFM合成エフェクト。  
+Distance sensor controls pitch. Shake the stick for FM synthesis effects.
 
-**picoruby-ot** provides two complementary instruments running on ATOM Matrix:
+M5 ATOM Matrix (ESP32) + PicoRuby + Chrome Web Audio で製作。  
+Built with M5 ATOM Matrix (ESP32) + PicoRuby + Chrome Web Audio.
 
-### otma.rb - Auto Drum Machine
-- **Automatic rhythm playback** via MIDI sound synthesis
-- **16-step drum patterns** with kick, snare, hi-hats, toms, claps
-- **Real-time MIDI output** (31250 bps) to external sound module
-- **Synchronized LED visualization** reflecting drum group history
-- **Button control** for crash cymbal triggering
+## ハードウェア / Hardware
 
-### otpwm.rb - Distance Sensor Instrument
-- **Distance-to-frequency mapping** (20mm-300mm → 200Hz-1000Hz)
-- **Accelerometer-driven sound modulation** (duty cycle and vibrato)
-- **VL53L0X ToF sensor** for responsive pitch control
-- **WS2812 LED strip** with dynamic color response to sound
-- **Ambient visualization** with smooth wave-like LED patterns
+| コンポーネント / Component | 購入先 / Link |
+|---------------------------|--------------|
+| M5 ATOM Matrix (ESP32-PICO-D4) | [スイッチサイエンス](https://ssci.to/6260) |
+| Unit ToF (VL53L0X 距離センサー / laser distance sensor) | [スイッチサイエンス](https://ssci.to/5219) |
+| LED スティック (10 RGB LEDs) | [スイッチサイエンス](https://ssci.to/5953) |
+| アクリルパイプ 直径4mm × 1m × 2本 / Acrylic pipe, 4mm dia. × 1m, ×2 | (ホームセンター等) |
+| USB ケーブル / USB cable | — |
+| PC (Chrome が動けばOK) / PC running Chrome | (動作確認: MacBook Air M3 13-inch 2024) |
 
-## Hardware
+## 仕組み / How it works
 
-**Device**: M5 ATOM Matrix (ESP32-PICO-D4)
+1. `otmeiwa.rb` を R2P2-ESP32 経由で ATOM Matrix にフラッシュ  
+   Flash `otmeiwa.rb` to ATOM Matrix via R2P2-ESP32
+2. Chrome で `web/index.html` を開く (`cd web && ruby -run -ehttpd . -p8000`)  
+   Open `web/index.html` in Chrome (serve with `cd web && ruby -run -ehttpd . -p8000`)
+3. Connect ボタンを押して ATOM Matrix のシリアルポートを選択 (115200bps)  
+   Click Connect, select the ATOM Matrix serial port (115200bps)
+4. センサーを手に持って動かすと距離で音程が変化  
+   Hold the sensor and move your hand — distance controls pitch
 
-**Configuration**:
-```
-┌─────────────────────┐
-│  ATOM Matrix        │
-├─────────────────────┤
-│ GPIO39 (built-in)   │ ──→ Button (both apps)
-│ GPIO21/25 (J3)      │ ──→ I2C bus (otpwm)
-│ GPIO22/19 (PortD)   │ ──→ MIDI UART (otma)
-│ GPIO33 (J4)         │ ──→ PWM Speaker (otpwm)
-│ GPIO26/22           │ ──→ WS2812 LED control
-└─────────────────────┘
-```
-
-**External Sensors** (otpwm.rb):
-- VL53L0X (Unit ToF) - Distance measurement
-- MPU6886 (internal) - Accelerometer/gyro
-
-**External Components** (otma.rb):
-- MIDI Unit (SAM2695 or compatible) - Sound module
-
-## File Structure
+## アーキテクチャ / Architecture
 
 ```
-picoruby-ot/
-├── src_components/R2P2-ESP32/
-│   ├── storage/home/
-│   │   ├── otma.rb              # Auto drum machine
-│   │   └── otpwm.rb             # Distance sensor instrument
-│   └── components/picoruby-esp32/
-│       └── picoruby/build_config/
-│           └── xtensa-esp.rb     # Xtensa (ESP32) build config
-├── Rakefile                      # Build automation
-├── CLAUDE.md                     # Project development guidelines
-├── README.md                     # This file
-└── .gitignore                    # Git exclusions
+ATOM Matrix (otmeiwa.rb)
+  VL53L0X 距離センサー → USB Serial 115200bps
+    ↓ <D:NNNN,AX:NNNN,AY:NNNN,AZ:NNNN>
+Chrome (web/index.html)
+  ruby.wasm → SensorMapper → FM Synthesizer (Web Audio API)
 ```
 
-## Quick Start
+## アプリ一覧 / Apps
 
-**Prerequisites**:
-- ESP-IDF installed at `$HOME/esp/esp-idf/`
-- Homebrew with OpenSSL (macOS)
-- M5 ATOM Matrix device
+| ファイル / File | 説明 / Description |
+|---------------|-------------------|
+| `otmeiwa.rb` | 距離＋加速度センサー → USB Serial → Chrome FM シンセ / Distance + accel sensor → USB Serial → Chrome FM synth |
+| `otma.rb` | 自動ドラムマシン (MIDI 出力、16ステップシーケンサー、WS2812 LED) / Auto drum machine (MIDI out, 16-step sequencer, WS2812 LED) |
+| `otpwm.rb` | 距離センサー → PWM スピーカー (スタンドアロン) / Distance sensor → PWM speaker (standalone) |
+| `otdr.rb` | MIDI ソフトスルー gateway (Power Drums、ボタン/クラッシュ LED フラッシュ) / MIDI soft-through gateway (Power Drums, button/crash LED flash) |
 
-**Setup**:
+### otdr.rb — MIDI ソフトスルー / MIDI Soft-Through Gateway
+
+受信した MIDI ドラムノートをそのまま転送 (ソフトスルー)。自動演奏なし。  
+Receives MIDI drum notes and forwards them unchanged (soft-through). No auto-play.
+
+ボタン押下で全 LED フラッシュ。クラッシュシンバル (note 49) でも同様。  
+Button press flashes all LEDs. Crash cymbal (note 49) also triggers flash.
+
+受信 MIDI ノートグループに応じて LED 色が変化。GM2 Power Kit (Program Change 16) で初期化。  
+LED color reacts to incoming MIDI note groups. Initialized with GM2 Power Kit (Program Change 16).
+
+ビルド: `rake build APP=otdr && rake flash`  
+Build: `rake build APP=otdr && rake flash`
+
+## ビルドコマンド / Build Commands
+
 ```bash
-# Step 1: Initialize project and build environment
-rake init
-
-# Step 2: Build otma (auto drum)
-rake build APP=otma
-
-# Step 3: Flash to ATOM Matrix
-rake flash
-
-# Step 4: Monitor serial output
-rake monitor
+rake check_env                # Check ESP-IDF environment
+rake monitor                  # Serial monitor (Ctrl+C to exit)
+rake build APP=otmeiwa        # Build serial sensor output
+rake build APP=otma           # Build auto drum machine
+rake build APP=otpwm          # Build PWM instrument
+rake build APP=otdr           # Build MIDI soft-through gateway
+rake flash                    # Flash firmware to ESP32
+rake cleanbuild APP=<name>    # Full clean rebuild (slow)
 ```
 
-**For otpwm** instead:
-```bash
-rake build APP=otpwm
-rake flash
-```
+| `APP=` value | File | Output |
+|---|---|---|
+| `otmeiwa` | `otmeiwa.rb` | Serial frames via UART0/USB |
+| `otma` | `otma.rb` | MIDI via GPIO22 |
+| `otpwm` | `otpwm.rb` | PWM speaker via GPIO33 |
+| `otdr` | `otdr.rb` | MIDI soft-through via GPIO22 |
 
-## Usage
+Run `rake -T` to list all available tasks.
 
-### otma.rb (Auto Drum Machine)
+## 自分で作る / Reproducing This Instrument
 
-1. Flash `otma.rb` to ATOM Matrix
-2. Connect MIDI Unit to PortD/J5 (GPIO22=TX, GPIO19=RX)
-3. Connect MIDI cable from Unit to sound module
-4. Power on - automatic drum pattern playback begins
-5. Press button to trigger crash cymbal
-6. Watch LEDs respond to rhythm pattern
+上記のコンポーネントはすべて市販品。このリポジトリとハードウェアがあれば展示と全く同じものが作れます。  
+All components listed above are commercially available. With this repository and the hardware, you can build the exact same instrument shown at the exhibition.
 
-**MIDI Configuration**:
-- Baud: 31250 (standard MIDI)
-- Channel: 10 (drums)
-- Notes: KICK=36, SNARE=38, HI_HAT=42/46, TOMS=41/47/50, CLAP=39, CRASH=49
+### 1. ビルド環境のセットアップ / Set up the build environment
 
-### otpwm.rb (Distance Sensor Instrument)
+[mruby girls ESP32 ガイド](https://mrubygirls.github.io/guides/esp32/) に従って ESP-IDF ツールチェーンと R2P2-ESP32 ファームウェアをインストール。  
+Follow the [mruby girls ESP32 guide](https://mrubygirls.github.io/guides/esp32/) to install the ESP-IDF toolchain and R2P2-ESP32 firmware.
 
-1. Flash `otpwm.rb` to ATOM Matrix
-2. Connect sensors via J3 (I2C: GPIO25=SDA, GPIO21=SCL)
-   - VL53L0X ToF sensor (Unit ToF)
-   - MPU6886 accelerometer (internal)
-3. Connect PWM speaker to J4 (GPIO33)
-4. Connect WS2812 LED strip (30 LEDs)
-5. Power on - move hand near sensor
-6. Distance changes pitch; tilt device for sound modulation
-7. Press button to mute/unmute
+### 2. ビルド＆フラッシュ / Build and flash
 
-**Sensor Ranges**:
-- Distance: 20mm (low tone) to 300mm (high tone)
-- Frequency: 200Hz to 1000Hz
-- Duty: 25% to 60%
-- LED count: 30 pixels with wave animation
-
-## LED Visualization
-
-### otma.rb
-- **Idle**: Dim gray
-- **On Beat**: Full brightness color based on drum group
-- **Color Mapping**:
-  - Group 1 (KICK): Red (0°)
-  - Group 2 (SNARE): Cyan (128°)
-  - Group 3 (CLAP): Magenta (192°)
-  - Group 4 (TOM): Yellow (64°)
-
-### otpwm.rb
-- **Distance bands**: Different hues per distance range
-- **Frequency response**: Color hue follows pitch
-- **Duty modulation**: Brightness reflects volume
-- **Wave animation**: Flowing LED pattern
-
-## Development
-
-**Edit applications**:
-```bash
-# Modify the application
-vim src_components/R2P2-ESP32/storage/home/otma.rb
-vim src_components/R2P2-ESP32/storage/home/otpwm.rb
-
-# Build and flash
-rake build APP=otma && rake flash
-```
-
-**Common Tasks**:
-```bash
-rake -T            # List all available rake tasks
-rake check_env     # Verify ESP-IDF environment
-rake monitor       # Show device serial output (Ctrl+C to exit)
-rake cleanbuild    # Full rebuild (slow but thorough)
-```
-
-## Architecture
-
-```
-picoruby-ot (PicoRuby/mruby applications)
-├── otma.rb
-│   ├── DrumMachine: MIDI pattern playback, LED group tracking
-│   ├── RhythmLEDVisualizer: Pattern-synchronized LED colors
-│   └── UART MIDI (GPIO22/19 @ 31250 bps)
-│
-└── otpwm.rb
-    ├── NoiseInstrument: Distance/accel → frequency/duty mapping
-    ├── AmbientLEDVisualizer: Sound-responsive LED patterns
-    ├── VL53L0X (ToF distance)
-    ├── MPU6886 (accelerometer)
-    ├── PWM Speaker (GPIO33)
-    └── WS2812 LED Strip (30 pixels)
-```
-
-## Performance
-
-- **Latency**: <10ms (IRQ-based)
-- **Memory**: ~200KB used (ESP32: 400KB available)
-- **MIDI Update**: Every 2-12ms (configurable)
-- **LED Update**: Every 1-4ms
-
-## Troubleshooting
-
-**Serial connection fails**:
-```bash
-# Identify device port
-ls /dev/cu.usbserial*
-
-# Set explicit port
-ESPPORT=/dev/cu.usbserial-XXXXXX rake monitor
-```
-
-**MIDI not working**:
-1. Verify GPIO22 (TX) and GPIO19 (RX) connections
-2. Confirm MIDI Unit baudrate: 31250
-3. Test with external MIDI monitor on host computer
-
-**Distance sensor not responding**:
-1. Check I2C connections (GPIO25=SDA, GPIO21=SCL)
-2. Verify I2C address: 0x29 (VL53L0X default)
-3. Enable DEBUG mode in otpwm.rb to see sensor values
-
-**Sound not coming through PWM speaker**:
-1. Check GPIO33 connection
-2. Verify duty cycle values in otpwm.rb (25-60%)
-3. Confirm speaker impedance (Grove compatible)
-
-## References
-
-- [M5 ATOM Matrix Documentation](https://docs.m5stack.com/en/core/atom_matrix)
-- [PicoRuby Docs](https://picoruby.org/)
-- [R2P2-ESP32 Repository](https://github.com/picoruby/R2P2-ESP32)
-- [MIDI Specification](https://en.wikipedia.org/wiki/MIDI)
-- [VL53L0X Distance Sensor](https://www.st.com/en/imaging-and-motion/vl53l0x.html)
-
-## License
-
-Educational examples for PicoRuby development on ESP32.
+詳細は `src_components/R2P2-ESP32/CLAUDE.md` を参照。  
+See `src_components/R2P2-ESP32/CLAUDE.md` for build instructions.
