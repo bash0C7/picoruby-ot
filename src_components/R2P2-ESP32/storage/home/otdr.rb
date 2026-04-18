@@ -106,11 +106,13 @@ end
 class GatewayLEDVisualizer
   LED_PIN   = 33
   LED_COUNT = 60
-  IDLE_BR   = 5     # 無音時の低輝度
-  HEAD_BR   = 220   # コメット先頭輝度
-  TRAIL_LEN = 20    # トレイル長(LED数)
-  SPEED_FP  = 15    # fixed-point /10 = 1.5 LED/update
-  MAX_P     = 8
+  IDLE_BR        = 5    # 無音時の低輝度
+  HEAD_BR        = 220  # コメット先頭輝度
+  TRAIL_LEN      = 20   # トレイル長(LED数)
+  INIT_SPEED_FP  = 5    # 初速 fixed-point /10 = 0.5 LED/update
+  ACCEL_FP       = 4    # 加速度 /10 = 0.4 LED/update²
+  MAX_SPEED_FP   = 60   # 最高速 /10 = 6 LED/update
+  MAX_P          = 8
 
   # ドラムグループ→色相マップ
   HUES_DRUM = [nil, 0, 128, 192, 64, 0]
@@ -122,6 +124,7 @@ class GatewayLEDVisualizer
     @idle_hue   = IDLE_HUE
     @p_pos = Array.new(MAX_P, -1)  # fixed-point *10, -1=inactive
     @p_hue = Array.new(MAX_P, 0)
+    @p_spd = Array.new(MAX_P, 0)  # 現在速度 fixed-point *10
   end
 
   def trigger(group)
@@ -129,6 +132,7 @@ class GatewayLEDVisualizer
       if @p_pos[i] < 0
         @p_pos[i] = 0
         @p_hue[i] = HUES_DRUM[group] || IDLE_HUE
+        @p_spd[i] = INIT_SPEED_FP
         @idle_hue  = @p_hue[i]
         return
       end
@@ -136,12 +140,16 @@ class GatewayLEDVisualizer
     # 満杯なら末尾スロット上書き
     @p_pos[MAX_P - 1] = 0
     @p_hue[MAX_P - 1] = HUES_DRUM[group] || IDLE_HUE
+    @p_spd[MAX_P - 1] = INIT_SPEED_FP
   end
 
   def update
     MAX_P.times do |i|
       next if @p_pos[i] < 0
-      @p_pos[i] += SPEED_FP
+      # 加速: 速度更新してから位置更新
+      @p_spd[i] += ACCEL_FP
+      @p_spd[i] = MAX_SPEED_FP if @p_spd[i] > MAX_SPEED_FP
+      @p_pos[i] += @p_spd[i]
       if @p_pos[i] > (LED_COUNT + TRAIL_LEN) * 10
         @p_pos[i] = -1
       end
