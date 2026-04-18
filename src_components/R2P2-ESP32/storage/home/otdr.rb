@@ -10,6 +10,7 @@ class MidiGateway
   MIDI_TX_PIN = 22
   MIDI_RX_PIN = 19
   CRASH = 49
+  MAX_TRIGGERS = 4
 
   # note→LEDグループ番号マッピング
   GT = {36=>1, 38=>2, 39=>3, 49=>5, 52=>5}
@@ -19,6 +20,8 @@ class MidiGateway
     @midi_buffer = []
     @external_group_history = [4, 4, 4]  # LEDグループ履歴
     @has_crash = false
+    @triggered_groups = Array.new(MAX_TRIGGERS, 0)  # 発音グループ記録
+    @triggered_count = 0
   end
 
   def has_crash?
@@ -29,8 +32,17 @@ class MidiGateway
     @external_group_history
   end
 
+  def triggered_count
+    @triggered_count
+  end
+
+  def triggered_group(i)
+    @triggered_groups[i]
+  end
+
   def process_midi
     @has_crash = false
+    @triggered_count = 0
 
     while @uart.bytes_available > 0
       data = @uart.read(1)
@@ -67,6 +79,11 @@ class MidiGateway
               if g != 5
                 @external_group_history.shift
                 @external_group_history.push(g)
+                # コメットトリガー記録
+                if @triggered_count < MAX_TRIGGERS
+                  @triggered_groups[@triggered_count] = g
+                  @triggered_count += 1
+                end
               end
             end
 
@@ -87,29 +104,67 @@ class MidiGateway
 end
 
 class GatewayLEDVisualizer
-  LED_PIN = 33
+  LED_PIN   = 33
   LED_COUNT = 60
+  IDLE_BR   = 5     # 無音時の低輝度
+  HEAD_BR   = 220   # コメット先頭輝度
+  TRAIL_LEN = 20    # トレイル長(LED数)
+  SPEED_FP  = 15    # fixed-point /10 = 1.5 LED/update
+  MAX_P     = 8
 
   # ドラムグループ→色相マップ
   HUES_DRUM = [nil, 0, 128, 192, 64, 0]
+  IDLE_HUE  = 64
 
   def initialize(led_strip)
-    @led_strip = led_strip
+    @led_strip  = led_strip
     @led_colors = Array.new(LED_COUNT, 0)
-    @tick = 0
+    @idle_hue   = IDLE_HUE
+    @p_pos = Array.new(MAX_P, -1)  # fixed-point *10, -1=inactive
+    @p_hue = Array.new(MAX_P, 0)
   end
 
-  def update(group_history)
-    @tick += 1
-    time_hue_shift = (@tick * 3) % 384
+  def trigger(group)
+    MAX_P.times do |i|
+      if @p_pos[i] < 0
+        @p_pos[i] = 0
+        @p_hue[i] = HUES_DRUM[group] || IDLE_HUE
+        @idle_hue  = @p_hue[i]
+        return
+      end
+    end
+    # 満杯なら末尾スロット上書き
+    @p_pos[MAX_P - 1] = 0
+    @p_hue[MAX_P - 1] = HUES_DRUM[group] || IDLE_HUE
+  end
+
+  def update
+    MAX_P.times do |i|
+      next if @p_pos[i] < 0
+      @p_pos[i] += SPEED_FP
+      if @p_pos[i] > (LED_COUNT + TRAIL_LEN) * 10
+        @p_pos[i] = -1
+      end
+    end
 
     LED_COUNT.times do |i|
-      color_idx = (i + @tick) % group_history.size
-      g = group_history[color_idx]
-      base_hue = HUES_DRUM[g]
-      hue = (base_hue + time_hue_shift + i * 10) % 384
-      sb = (200 << 8) | 60
-      @led_colors[i] = (hue << 16) | sb
+      best_br  = IDLE_BR
+      best_hue = @idle_hue
+
+      MAX_P.times do |j|
+        next if @p_pos[j] < 0
+        head = @p_pos[j] / 10
+        dist = head - i
+        next if dist < 0 || dist > TRAIL_LEN
+        # 線形減衰: 先頭=HEAD_BR, TRAIL_LEN離れると0
+        br = HEAD_BR * (TRAIL_LEN - dist) / TRAIL_LEN
+        if br > best_br
+          best_br  = br
+          best_hue = @p_hue[j]
+        end
+      end
+
+      @led_colors[i] = (best_hue << 16) | (200 << 8) | best_br
     end
   end
 
@@ -119,6 +174,7 @@ class GatewayLEDVisualizer
 
   def flash
     @led_strip.flash!(LED_COUNT)
+    # @p_pos/@p_hueはここで消さない → flash後にコメット自動復帰
   end
 end
 
@@ -154,10 +210,12 @@ loop do
     led_viz.flash
   end
 
-  if tick_count % 5 == 0
-    led_viz.update(gateway.external_group_history)
+  gateway.triggered_count.times do |i|
+    led_viz.trigger(gateway.triggered_group(i))
   end
+
   if tick_count % 2 == 0
+    led_viz.update
     led_viz.show
   end
 end
