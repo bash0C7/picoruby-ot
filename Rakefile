@@ -395,7 +395,7 @@ task :buildall do
   puts "Build all completed successfully"
 end
 
-desc "ビルド：rake buildのみ実行"
+desc "ビルド：rake buildのみ実行 (APP=otmeiwa|otma|otpwm|otdr)"
 task :build do
   puts "Building project..."
   setup_environment

@@ -64,6 +64,28 @@ LED color reacts to incoming MIDI note groups. Initialized with GM2 Power Kit (P
 ビルド: `rake build APP=otdr && rake flash`  
 Build: `rake build APP=otdr && rake flash`
 
+## ビルドコマンド / Build Commands
+
+```bash
+rake check_env                # Check ESP-IDF environment
+rake monitor                  # Serial monitor (Ctrl+C to exit)
+rake build APP=otmeiwa        # Build serial sensor output
+rake build APP=otma           # Build auto drum machine
+rake build APP=otpwm          # Build PWM instrument
+rake build APP=otdr           # Build MIDI soft-through gateway
+rake flash                    # Flash firmware to ESP32
+rake cleanbuild APP=<name>    # Full clean rebuild (slow)
+```
+
+| `APP=` value | File | Output |
+|---|---|---|
+| `otmeiwa` | `otmeiwa.rb` | Serial frames via UART0/USB |
+| `otma` | `otma.rb` | MIDI via GPIO22 |
+| `otpwm` | `otpwm.rb` | PWM speaker via GPIO33 |
+| `otdr` | `otdr.rb` | MIDI soft-through via GPIO22 |
+
+Run `rake -T` to list all available tasks.
+
 ## 自分で作る / Reproducing This Instrument
 
 上記のコンポーネントはすべて市販品。このリポジトリとハードウェアがあれば展示と全く同じものが作れます。  
