@@ -82,3 +82,6 @@ src_components/R2P2-ESP32/storage/home/*.mrb
 # Web server runtime files
 web/server.log
 web/server.pid
+
+# Git worktrees (superpowers)
+.worktrees/
