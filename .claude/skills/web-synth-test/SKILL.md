@@ -193,7 +193,7 @@ After all steps, output a summary table:
 | 8 | C:M ratio + FB sliders | ✅ |
 | 9 | No console errors | ✅ |
 
-**PASSED 9/9** ピョン。
+**PASSED 9/9**
 ```
 
 If any check failed, include the failure detail below the table.

@@ -23,7 +23,7 @@ When this command is invoked:
    - `stop`    → `rake server:stop`
    - `restart` → `rake server:restart`
    - `status`  → `rake server:status`
-3. Report the result to the user in Japanese with ピョン suffix
+3. Report the result to the user in the reply voice configured via Claude Code /config
 
 ## Example
 
