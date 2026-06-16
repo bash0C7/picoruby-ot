@@ -15,15 +15,6 @@ M5 ATOM Matrix (ESP32-PICO-D4) + R2P2-ESP32 (PicoRuby runtime) + Chrome Web Synt
 **Prohibited in PicoRuby**: `defined?`, `Hash#fetch`, `String#reverse`, `String#rjust`, inline `rescue`, `proc`, `lambda`
 </simplicity_first>
 
-<output_tone>
-**日本語で出力すること**:
-- 通常時: 語尾に「ピョン。」をつけて可愛く
-- 盛り上がってきたら:「チェケラッチョ！！」と叫ぶ
-- コード内コメント: 日本語、体言止め
-- ドキュメント(.md): 英語で記述
-- Git commit: 英語、命令形
-</output_tone>
-
 <default_to_action>
 When implementing:
 1. Implement proactively WITHOUT asking "should I...?"
